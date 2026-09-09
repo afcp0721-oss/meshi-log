@@ -1,0 +1,166 @@
+index.html
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>メシログ（仮）</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex justify-center items-center min-h-screen p-4 font-sans text-gray-800">
+
+  <main class="w-full max-w-sm bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col border border-gray-100">
+    <!-- ヘッダー -->
+    <header class="px-5 py-4 flex justify-between items-center border-b border-gray-100 bg-white sticky top-0 z-10">
+      <div class="flex items-center gap-2">
+        <span class="text-xl">🍴</span>
+        <h1 class="font-extrabold text-gray-800 tracking-wider text-base">メシログ</h1>
+      </div>
+      <button class="text-xs text-gray-400 font-medium hover:text-gray-600 transition">マイ履歴</button>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <div class="p-5 flex-1 flex flex-col gap-4 overflow-y-auto">
+      
+      <!-- 写真アップロード -->
+      <div class="relative w-full aspect-square bg-orange-50/50 rounded-2xl border-2 border-dashed border-orange-200 hover:border-orange-400 transition flex flex-col items-center justify-center cursor-pointer overflow-hidden group">
+        <input type="file" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer z-10" onchange="handleImage(event)">
+        <div id="image-preview" class="absolute inset-0 hidden"></div>
+        <div class="text-center group-hover:scale-105 transition duration-200">
+          <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mx-auto mb-2 text-xl">📸</div>
+          <span class="text-xs font-bold text-gray-700 block">写真を撮る / 選ぶ</span>
+          <span class="text-[10px] text-gray-400 block mt-0.5">選ぶとAIが自動で食レポ作成！</span>
+        </div>
+      </div>
+
+      <!-- 今日の満足度 -->
+      <div>
+        <label class="text-[11px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">今日の満足度</label>
+        <div class="grid grid-cols-3 gap-1.5">
+          <button type="button" onclick="selectRating(this)" class="rating-btn py-2 px-1 border rounded-xl font-bold text-xs bg-orange-500 text-white border-orange-500 transition">😊 うまい！</button>
+          <button type="button" onclick="selectRating(this)" class="rating-btn py-2 px-1 border rounded-xl font-bold text-xs bg-gray-50 border-gray-200 text-gray-700 transition">🔥 リピ確定</button>
+          <button type="button" onclick="selectRating(this)" class="rating-btn py-2 px-1 border rounded-xl font-bold text-xs bg-gray-50 border-gray-200 text-gray-700 transition">👑 神コスパ</button>
+        </div>
+      </div>
+
+      <!-- ララの自動レビュー表示枠 -->
+      <div class="bg-amber-50/50 rounded-2xl p-3 border border-amber-100 flex-1 flex flex-col min-h-[140px]">
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="flex items-center gap-1.5 text-xs font-bold text-gray-800">
+            <span>🤖</span>
+            <span>メシログレビュー</span>
+          </div>
+          <span id="loading-badge" class="hidden text-[10px] bg-orange-500 text-white px-2 py-0.5 rounded-full font-bold animate-pulse">分析中...</span>
+        </div>
+        <textarea id="ai-review" class="w-full flex-1 bg-transparent border-0 resize-none text-xs text-gray-700 leading-relaxed focus:outline-none placeholder-gray-400" placeholder="写真を選ぶと、ララが自動でレビューを作成します！"></textarea>
+      </div>
+
+    </div>
+
+    <!-- フッター送信ボタン -->
+    <footer class="p-4 bg-white border-t border-gray-100 flex flex-col gap-2">
+      <div class="flex items-center justify-between text-xs font-bold text-gray-600 px-1">
+        <label class="flex items-center gap-1.5">
+          <input type="checkbox" checked class="accent-orange-500 rounded">
+          <span>アプリ内保存</span>
+        </label>
+        <label class="flex items-center gap-1.5">
+          <input type="checkbox" checked class="accent-black rounded">
+          <span>Xに流す</span>
+        </label>
+      </div>
+      <button onclick="sendReview()" class="w-full py-3.5 bg-gray-900 hover:bg-black text-white font-black text-sm rounded-xl shadow-lg transition active:scale-[0.98]">
+        この内容で送信する
+      </button>
+    </footer>
+  </main>
+
+  <script>
+    // 設定項目
+    const GEMINI_API_KEY = "AQ.Ab8RN6LVXXZj29RRtBS9eX4yFZIEtpAAKWxsrTgh8hhUp1uy-Q";
+    let currentRating = "😊 うまい！";
+
+    function selectRating(btn) {
+      document.querySelectorAll('.rating-btn').forEach(b => {
+        b.className = "rating-btn py-2 px-1 border rounded-xl font-bold text-xs bg-gray-50 border-gray-200 text-gray-700 transition";
+      });
+      btn.className = "rating-btn py-2 px-1 border rounded-xl font-bold text-xs bg-orange-500 text-white border-orange-500 transition";
+      currentRating = btn.innerText.trim();
+    }
+
+    async function handleImage(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const preview = document.getElementById('image-preview');
+      preview.innerHTML = `<img src="${URL.createObjectURL(file)}" class="w-full h-full object-cover">`;
+      preview.classList.remove('hidden');
+
+      const reviewBox = document.getElementById('ai-review');
+      const badge = document.getElementById('loading-badge');
+      badge.classList.remove('hidden');
+      reviewBox.value = "料理を分析してレビューを作成中...";
+
+      try {
+        const base64 = await fileToBase64(file);
+        const text = await generateReview(base64, file.type);
+        reviewBox.value = text;
+      } catch (err) {
+        console.error(err);
+        reviewBox.value = "解析に失敗しました。(" + err.message + ")";
+      } finally {
+        badge.classList.add('hidden');
+      }
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function generateReview(base64Data, mimeType) {
+      const prompt = `この料理写真を見て、X（Twitter）で伸びるシズル感たっぷりの食レポを120字程度で作成してください。
+評価は「${currentRating}」です。
+末尾に推定カロリーと拡散用ハッシュタグ（#料理名 #メシログ など3〜4個）を添えてください。`;
+
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`;
+      
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mimeType, data: base64Data } }
+            ]
+          }]
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error?.message || "通信エラー");
+      }
+
+      const data = await res.json();
+      return data.candidates[0].content.parts[0].text;
+    }
+
+    function sendReview() {
+      const text = document.getElementById('ai-review').value;
+      if (!text || text.includes("作成中")) {
+        alert("レビューが完成していません");
+        return;
+      }
+      // Xの投稿画面へ飛ばすワンタップ連携
+      const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+      window.open(tweetUrl, '_blank');
+    }
+  </script>
+</body>
+</html>
