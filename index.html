@@ -122,9 +122,14 @@
     }
 
     async function generateReview(base64Data, mimeType) {
-      const prompt = `この料理写真を見て、X（Twitter）で伸びるシズル感たっぷりの食レポを120字程度で作成してください。
-評価は「${currentRating}」です。
-末尾に推定カロリーと拡散用ハッシュタグ（#料理名 #メシログ など3〜4個）を添えてください。`;
+     const prompt = `この料理の写真から、食欲をそそる魅力的な短文レビューを作成してください。
+【重要条件】
+- ハッシュタグ、推定カロリー、絵文字を含めた「全体の合計文字数を全角90〜100文字以内」に厳守すること。
+- X(Twitter)の140文字制限を絶対にオーバーしないこと。
+- 構成例：
+  一言絶賛レビュー（50字前後）
+  推定カロリー：約◯◯kcal
+  #料理名 #店名 #メシログ`;
 
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`;
       
