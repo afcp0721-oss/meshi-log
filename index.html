@@ -45,12 +45,6 @@
     .btn-sub { flex: 1; padding: 10px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; border: none; cursor: pointer; text-align: center; }
     .btn-copy { background: #e2e8f0; color: #1e293b; }
     .btn-discord { background: #5865F2; color: #ffffff; }
-
-    /* 設定エリア */
-    .settings-details { margin-top: 24px; border-top: 1px dashed #cbd5e1; padding-top: 12px; }
-    .settings-summary { font-size: 0.75rem; color: #64748b; cursor: pointer; outline: none; }
-    .settings-content { margin-top: 8px; }
-    .settings-input { width: 100%; font-size: 0.75rem; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 6px; }
   </style>
 </head>
 <body>
@@ -103,19 +97,13 @@
       <button id="discordBtn" class="btn-sub btn-discord" onclick="sendToDiscord()">💬 Discordへ保存</button>
     </div>
   </div>
-
-  <!-- Discord Webhook 設定 -->
-  <details class="settings-details">
-    <summary class="settings-summary">⚙️ 保存先設定（Discord Webhook）</summary>
-    <div class="settings-content">
-      <input type="text" id="discordWebhookInput" class="settings-input" placeholder="Discord Webhook URL を貼り付け" onchange="saveWebhookUrl(this.value)">
-      <div style="font-size: 0.7rem; color: #94a3b8;">※一度入力するとスマホに保存され、次から自動でこのチャンネルに保管されます。</div>
-    </div>
-  </details>
 </div>
 
 <script>
   const GEMINI_API_KEY = "AQ.Ab8RN6LVXXZj29RRtBS9eX4yFZIEtpAAKWxsrTgh8hhUp1uy-Q";
+  // ボス専用Discord Webhook URL
+  const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1547649328829702236/wooY6kICkkTKbD4X00lIS2pQ6oBiizT1bjenjW51f8tbcC5pyA-fBqX3KviiGMnEuwIS";
+
   let imagesData = [];
   let selectedTag = "🔥 最高！";
   let selectedStyle = localStorage.getItem('user_post_style') || 'natural';
@@ -124,16 +112,7 @@
   window.addEventListener('DOMContentLoaded', () => {
     const target = document.querySelector(`.style-btn[data-style="${selectedStyle}"]`) || document.querySelector('.style-btn');
     if (target) selectStyle(target);
-
-    const savedWebhook = localStorage.getItem('discord_webhook_url');
-    if (savedWebhook) {
-      document.getElementById('discordWebhookInput').value = savedWebhook;
-    }
   });
-
-  function saveWebhookUrl(val) {
-    localStorage.setItem('discord_webhook_url', val.trim());
-  }
 
   function selectTag(btn) {
     document.querySelectorAll('.tag-btn').forEach(b => b.classList.remove('active'));
@@ -179,7 +158,6 @@
   }
 
   async function handleMultipleImages(event) {
-    // 最大6枚
     const files = Array.from(event.target.files).slice(0, 6);
     if (!files.length) return;
 
@@ -277,6 +255,17 @@
       document.getElementById('shortText').value = result.short_text;
       document.getElementById('longText').value = result.long_text;
 
+      // スマホ端末内（LocalStorage）への自動蓄積
+      saveToLocalHistory({
+        date: new Date().toLocaleString(),
+        category: result.category,
+        short_text: result.short_text,
+        long_text: result.long_text,
+        tag: selectedTag,
+        style: selectedStyle,
+        imageCount: imagesData.length
+      });
+
       resultSection.style.display = 'block';
     } catch (err) {
       alert("エラー詳細: " + err.message);
@@ -295,13 +284,18 @@
     alert("短文と長文の両方をコピーしました！");
   }
 
-  async function sendToDiscord() {
-    const webhookUrl = localStorage.getItem('discord_webhook_url');
-    if (!webhookUrl) {
-      alert("画面下の『保存先設定』に Discord の Webhook URL を入力してください。");
-      return;
+  function saveToLocalHistory(record) {
+    try {
+      const history = JSON.parse(localStorage.getItem('my_life_logs') || '[]');
+      history.unshift(record);
+      if (history.length > 50) history.pop();
+      localStorage.setItem('my_life_logs', JSON.stringify(history));
+    } catch (e) {
+      console.warn("ローカル保存に失敗しました", e);
     }
+  }
 
+  async function sendToDiscord() {
     const shortVal = document.getElementById('shortText').value;
     const longVal = document.getElementById('longText').value;
     const btn = document.getElementById('discordBtn');
@@ -311,7 +305,7 @@
     const payload = {
       embeds: [{
         title: `📸 ${currentCategory}ログ（${selectedTag}）`,
-        color: 15339532, // オレンジ系カラー
+        color: 15339532,
         fields: [
           { name: "📱 X用（短文）", value: shortVal || "なし" },
           { name: "📝 詳細アーカイブ（長文）", value: longVal || "なし" }
@@ -321,7 +315,7 @@
     };
 
     try {
-      const res = await fetch(webhookUrl, {
+      const res = await fetch(DISCORD_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -329,7 +323,8 @@
       if (!res.ok) throw new Error("Discord送信エラー");
       alert("Discordへの保存が完了しました！");
     } catch (e) {
-      alert("Discord送信に失敗しました。Webhook URLを確認してください。");
+      alert("Discord送信に失敗しました。");
+      console.error(e);
     } finally {
       btn.disabled = false;
       btn.innerText = "💬 Discordへ保存";
