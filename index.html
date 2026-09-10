@@ -45,6 +45,19 @@
     .btn-sub { flex: 1; padding: 10px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; border: none; cursor: pointer; text-align: center; }
     .btn-copy { background: #e2e8f0; color: #1e293b; }
     .btn-discord { background: #5865F2; color: #ffffff; }
+
+    /* 過去ログエリア */
+    .history-section { margin-top: 28px; border-top: 1px solid #e2e8f0; padding-top: 16px; }
+    .history-summary { font-size: 0.85rem; font-weight: 700; color: #475569; cursor: pointer; outline: none; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+    .history-summary::-webkit-details-marker { display: none; }
+    .history-list { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .history-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; }
+    .history-header { display: flex; justify-content: space-between; font-size: 0.7rem; color: #64748b; margin-bottom: 6px; }
+    .history-badge { background: #fed7aa; color: #9a3412; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+    .history-text { font-size: 0.8rem; color: #1e293b; line-height: 1.4; margin-bottom: 8px; max-height: 60px; overflow-y: auto; }
+    .history-btn-row { display: flex; justify-content: flex-end; gap: 6px; }
+    .btn-mini-copy { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; font-size: 0.7rem; cursor: pointer; color: #334155; }
+    .btn-mini-clear { background: none; border: none; color: #94a3b8; font-size: 0.7rem; cursor: pointer; text-decoration: underline; margin-top: 8px; text-align: right; display: block; width: 100%; }
   </style>
 </head>
 <body>
@@ -97,11 +110,20 @@
       <button id="discordBtn" class="btn-sub btn-discord" onclick="sendToDiscord()">💬 Discordへ保存</button>
     </div>
   </div>
+
+  <!-- 過去ログ閲覧エリア -->
+  <details class="history-section" id="historyDetails">
+    <summary class="history-summary">
+      <span>📂 スマホ内の過去ログ履歴</span>
+      <span id="historyCountBadge" style="font-size: 0.75rem; color: #ea580c;">0件</span>
+    </summary>
+    <div class="history-list" id="historyList"></div>
+    <button class="btn-mini-clear" onclick="clearHistory()">履歴をすべてクリア</button>
+  </details>
 </div>
 
 <script>
   const GEMINI_API_KEY = "AQ.Ab8RN6LVXXZj29RRtBS9eX4yFZIEtpAAKWxsrTgh8hhUp1uy-Q";
-  // ボス専用Discord Webhook URL
   const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1547649328829702236/wooY6kICkkTKbD4X00lIS2pQ6oBiizT1bjenjW51f8tbcC5pyA-fBqX3KviiGMnEuwIS";
 
   let imagesData = [];
@@ -112,6 +134,7 @@
   window.addEventListener('DOMContentLoaded', () => {
     const target = document.querySelector(`.style-btn[data-style="${selectedStyle}"]`) || document.querySelector('.style-btn');
     if (target) selectStyle(target);
+    renderHistory();
   });
 
   function selectTag(btn) {
@@ -127,7 +150,6 @@
     localStorage.setItem('user_post_style', selectedStyle);
   }
 
-  // クライアント側で画像を軽量化（長辺1200px・JPEG圧縮）
   function compressImage(file) {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -255,9 +277,8 @@
       document.getElementById('shortText').value = result.short_text;
       document.getElementById('longText').value = result.long_text;
 
-      // スマホ端末内（LocalStorage）への自動蓄積
       saveToLocalHistory({
-        date: new Date().toLocaleString(),
+        date: new Date().toLocaleString([], { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
         category: result.category,
         short_text: result.short_text,
         long_text: result.long_text,
@@ -290,19 +311,61 @@
       history.unshift(record);
       if (history.length > 50) history.pop();
       localStorage.setItem('my_life_logs', JSON.stringify(history));
+      renderHistory();
     } catch (e) {
       console.warn("ローカル保存に失敗しました", e);
     }
   }
 
- async function sendToDiscord() {
+  function renderHistory() {
+    const listEl = document.getElementById('historyList');
+    const badgeEl = document.getElementById('historyCountBadge');
+    const history = JSON.parse(localStorage.getItem('my_life_logs') || '[]');
+    
+    badgeEl.innerText = `${history.length}件`;
+    if (!history.length) {
+      listEl.innerHTML = '<div style="font-size: 0.75rem; color: #94a3b8; text-align: center; padding: 10px;">まだ保存されたログがありません</div>';
+      return;
+    }
+
+    listEl.innerHTML = history.slice(0, 10).map((item, idx) => `
+      <div class="history-card">
+        <div class="history-header">
+          <span><span class="history-badge">${item.category}</span> ${item.tag}</span>
+          <span>${item.date}</span>
+        </div>
+        <div class="history-text"><strong>X用:</strong> ${item.short_text}</div>
+        <div class="history-btn-row">
+          <button class="btn-mini-copy" onclick="copyHistoryItem(${idx}, 'short')">短文コピー</button>
+          <button class="btn-mini-copy" onclick="copyHistoryItem(${idx}, 'long')">長文コピー</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function copyHistoryItem(index, type) {
+    const history = JSON.parse(localStorage.getItem('my_life_logs') || '[]');
+    const item = history[index];
+    if (!item) return;
+    const text = type === 'short' ? item.short_text : item.long_text;
+    navigator.clipboard.writeText(text);
+    alert(`${type === 'short' ? '短文' : '長文'}をコピーしました！`);
+  }
+
+  function clearHistory() {
+    if (confirm("スマホ内の履歴をすべて削除しますか？")) {
+      localStorage.removeItem('my_life_logs');
+      renderHistory();
+    }
+  }
+
+  async function sendToDiscord() {
     const shortVal = document.getElementById('shortText').value;
     const longVal = document.getElementById('longText').value;
     const btn = document.getElementById('discordBtn');
     btn.disabled = true;
     btn.innerText = "画像と一緒に送信中...";
 
-    // テキスト情報をEmbedカードとして作成
     const payload = {
       embeds: [{
         title: `📸 ${currentCategory}ログ（${selectedTag}）`,
@@ -315,11 +378,9 @@
       }]
     };
 
-    // 画像とテキストをまとめるFormDataを作成
     const formData = new FormData();
     formData.append("payload_json", JSON.stringify(payload));
 
-    // 圧縮済みの画像を添付ファイルとして追加
     for (let i = 0; i < imagesData.length; i++) {
       const byteCharacters = atob(imagesData[i].base64);
       const byteNumbers = new Array(byteCharacters.length);
@@ -334,7 +395,7 @@
     try {
       const res = await fetch(DISCORD_WEBHOOK_URL, {
         method: "POST",
-        body: formData // Content-Typeヘッダーはブラウザが自動付与
+        body: formData
       });
       if (!res.ok) throw new Error("Discord送信エラー");
       alert("写真とテキストをDiscordに保存しました！");
