@@ -3,168 +3,227 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>メシログ（仮）</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>メシログ & ライフログ AI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: #f4f5f7; color: #1e293b; padding: 16px; display: flex; justify-content: center; }
+    .app-card { width: 100%; max-width: 480px; background: #ffffff; border-radius: 16px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+    h1 { font-size: 1.25rem; font-weight: 800; color: #0f172a; margin-bottom: 4px; text-align: center; }
+    .sub { font-size: 0.8rem; color: #64748b; text-align: center; margin-bottom: 16px; }
+
+    .step-title { font-size: 0.85rem; font-weight: 700; color: #475569; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+    .badge { background: #ea580c; color: #fff; font-size: 0.7rem; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; }
+
+    /* Step 1: 写真アップロード */
+    .upload-zone { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 16px; text-align: center; cursor: pointer; background: #f8fafc; margin-bottom: 16px; }
+    .upload-zone input { display: none; }
+    .preview-img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 8px; display: none; margin-top: 8px; }
+
+    /* Step 2: 気分タグ */
+    .tag-container { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+    .tag-btn { border: 1px solid #cbd5e1; background: #ffffff; padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; cursor: pointer; }
+    .tag-btn.active { background: #ea580c; color: #ffffff; border-color: #ea580c; font-weight: 700; }
+
+    /* Step 3: 送信ボタン */
+    .btn-main { width: 100%; background: #ea580c; color: white; border: none; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3); }
+    .btn-main:disabled { background: #cbd5e1; cursor: not-allowed; box-shadow: none; }
+
+    /* 結果表示エリア */
+    .result-section { margin-top: 20px; display: none; }
+    .detected-mode { font-size: 0.75rem; font-weight: 700; color: #ea580c; background: #fff7ed; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 10px; }
+    
+    .box-title { font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 6px; }
+    .output-box { width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 0.85rem; line-height: 1.5; color: #0f172a; resize: vertical; margin-bottom: 8px; background: #fafafa; }
+    
+    .action-row { display: flex; gap: 8px; margin-bottom: 16px; }
+    .btn-sub { flex: 1; padding: 8px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; border: none; cursor: pointer; text-align: center; text-decoration: none; }
+    .btn-x { background: #000000; color: #ffffff; display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .btn-copy { background: #e2e8f0; color: #334155; }
+
+    .loading { text-align: center; color: #ea580c; font-weight: 700; font-size: 0.9rem; margin-top: 16px; display: none; }
+  </style>
 </head>
-<body class="bg-gray-100 flex justify-center items-center min-h-screen p-4 font-sans text-gray-800">
+<body>
 
-  <main class="w-full max-w-sm bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col border border-gray-100">
-    <!-- ヘッダー -->
-    <header class="px-5 py-4 flex justify-between items-center border-b border-gray-100 bg-white sticky top-0 z-10">
-      <div class="flex items-center gap-2">
-        <span class="text-xl">🍴</span>
-        <h1 class="font-extrabold text-gray-800 tracking-wider text-base">メシログ</h1>
-      </div>
-      <button class="text-xs text-gray-400 font-medium hover:text-gray-600 transition">マイ履歴</button>
-    </header>
+<div class="app-card">
+  <h1>メシログ & ライフログ</h1>
+  <div class="sub">写真を選ぶだけでAIが自動判別して投稿作成</div>
 
-    <!-- メインコンテンツ -->
-    <div class="p-5 flex-1 flex flex-col gap-4 overflow-y-auto">
-      
-      <!-- 写真アップロード -->
-      <div class="relative w-full aspect-square bg-orange-50/50 rounded-2xl border-2 border-dashed border-orange-200 hover:border-orange-400 transition flex flex-col items-center justify-center cursor-pointer overflow-hidden group">
-        <input type="file" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer z-10" onchange="handleImage(event)">
-        <div id="image-preview" class="absolute inset-0 hidden"></div>
-        <div class="text-center group-hover:scale-105 transition duration-200">
-          <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mx-auto mb-2 text-xl">📸</div>
-          <span class="text-xs font-bold text-gray-700 block">写真を撮る / 選ぶ</span>
-          <span class="text-[10px] text-gray-400 block mt-0.5">選ぶとAIが自動で食レポ作成！</span>
-        </div>
-      </div>
+  <!-- STEP 1 -->
+  <div class="step-title"><span class="badge">1</span> 写真を選ぶ（料理・風景・人物・日常）</div>
+  <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+    <span id="uploadText">📷 タップして写真を選択</span>
+    <input type="file" id="fileInput" accept="image/*" onchange="handleImage(event)">
+    <img id="preview" class="preview-img" alt="プレビュー">
+  </div>
 
-      <!-- 今日の満足度 -->
-      <div>
-        <label class="text-[11px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">今日の満足度</label>
-        <div class="grid grid-cols-3 gap-1.5">
-          <button type="button" onclick="selectRating(this)" class="rating-btn py-2 px-1 border rounded-xl font-bold text-xs bg-orange-500 text-white border-orange-500 transition">😊 うまい！</button>
-          <button type="button" onclick="selectRating(this)" class="rating-btn py-2 px-1 border rounded-xl font-bold text-xs bg-gray-50 border-gray-200 text-gray-700 transition">🔥 リピ確定</button>
-          <button type="button" onclick="selectRating(this)" class="rating-btn py-2 px-1 border rounded-xl font-bold text-xs bg-gray-50 border-gray-200 text-gray-700 transition">👑 神コスパ</button>
-        </div>
-      </div>
+  <!-- STEP 2 -->
+  <div class="step-title"><span class="badge">2</span> 今日の満足度・気分（任意）</div>
+  <div class="tag-container" id="tagList">
+    <button class="tag-btn active" onclick="selectTag(this)">🔥 最高！</button>
+    <button class="tag-btn" onclick="selectTag(this)">😋 うまい</button>
+    <button class="tag-btn" onclick="selectTag(this)">☕ まったり</button>
+    <button class="tag-btn" onclick="selectTag(this)">✨ 絶景・爽快</button>
+    <button class="tag-btn" onclick="selectTag(this)">👍 リピ確定</button>
+  </div>
 
-      <!-- ララの自動レビュー表示枠 -->
-      <div class="bg-amber-50/50 rounded-2xl p-3 border border-amber-100 flex-1 flex flex-col min-h-[140px]">
-        <div class="flex items-center justify-between mb-1.5">
-          <div class="flex items-center gap-1.5 text-xs font-bold text-gray-800">
-            <span>🤖</span>
-            <span>メシログレビュー</span>
-          </div>
-          <span id="loading-badge" class="hidden text-[10px] bg-orange-500 text-white px-2 py-0.5 rounded-full font-bold animate-pulse">分析中...</span>
-        </div>
-        <textarea id="ai-review" class="w-full flex-1 bg-transparent border-0 resize-none text-xs text-gray-700 leading-relaxed focus:outline-none placeholder-gray-400" placeholder="写真を選ぶと、ララが自動でレビューを作成します！"></textarea>
-      </div>
+  <!-- STEP 3 -->
+  <div class="step-title"><span class="badge">3</span> AIで同時生成</div>
+  <button id="generateBtn" class="btn-main" onclick="generatePosts()" disabled>AIでコメントを作成する</button>
+  <div id="loading" class="loading">AIが写真を解析中...</div>
 
+  <!-- 結果表示 -->
+  <div id="resultSection" class="result-section">
+    <span id="detectedMode" class="detected-mode">🍜 食レポモード</span>
+
+    <!-- X短文エリア -->
+    <div class="box-title">📱 X用（短文・130字以内）</div>
+    <textarea id="shortText" class="output-box" rows="4"></textarea>
+    <div class="action-row">
+      <a id="xPostBtn" href="#" target="_blank" class="btn-sub btn-x">𝕏 にポストする</a>
+      <button class="btn-sub btn-copy" onclick="copyText('shortText')">コピー</button>
     </div>
 
-    <!-- フッター送信ボタン -->
-    <footer class="p-4 bg-white border-t border-gray-100 flex flex-col gap-2">
-      <div class="flex items-center justify-between text-xs font-bold text-gray-600 px-1">
-        <label class="flex items-center gap-1.5">
-          <input type="checkbox" checked class="accent-orange-500 rounded">
-          <span>アプリ内保存</span>
-        </label>
-        <label class="flex items-center gap-1.5">
-          <input type="checkbox" checked class="accent-black rounded">
-          <span>Xに流す</span>
-        </label>
-      </div>
-      <button onclick="sendReview()" class="w-full py-3.5 bg-gray-900 hover:bg-black text-white font-black text-sm rounded-xl shadow-lg transition active:scale-[0.98]">
-        この内容で送信する
-      </button>
-    </footer>
-  </main>
+    <!-- 詳細長文エリア -->
+    <div class="box-title">📝 詳細アーカイブ用（制限なし長文）</div>
+    <textarea id="longText" class="output-box" rows="7"></textarea>
+    <div class="action-row">
+      <button class="btn-sub btn-copy" onclick="copyText('longText')">長文をコピーする</button>
+    </div>
+  </div>
+</div>
 
-  <script>
-    // 設定項目
-    const GEMINI_API_KEY = "AQ.Ab8RN6LVXXZj29RRtBS9eX4yFZIEtpAAKWxsrTgh8hhUp1uy-Q";
-    let currentRating = "😊 うまい！";
+<script>
+  // ※お使いのGemini APIキーをセットしてください
+  const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY";
+  let base64Image = null;
+  let selectedTag = "🔥 最高！";
 
-    function selectRating(btn) {
-      document.querySelectorAll('.rating-btn').forEach(b => {
-        b.className = "rating-btn py-2 px-1 border rounded-xl font-bold text-xs bg-gray-50 border-gray-200 text-gray-700 transition";
-      });
-      btn.className = "rating-btn py-2 px-1 border rounded-xl font-bold text-xs bg-orange-500 text-white border-orange-500 transition";
-      currentRating = btn.innerText.trim();
-    }
+  function selectTag(btn) {
+    document.querySelectorAll('.tag-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedTag = btn.innerText;
+  }
 
-    async function handleImage(event) {
-      const file = event.target.files[0];
-      if (!file) return;
+  function handleImage(event) {
+    const file = event.target.files[0];
+    if (!file) return;
 
-      const preview = document.getElementById('image-preview');
-      preview.innerHTML = `<img src="${URL.createObjectURL(file)}" class="w-full h-full object-cover">`;
-      preview.classList.remove('hidden');
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      base64Image = e.target.result.split(',')[1];
+      const preview = document.getElementById('preview');
+      preview.src = e.target.result;
+      preview.style.display = 'block';
+      document.getElementById('uploadText').style.display = 'none';
+      document.getElementById('generateBtn').disabled = false;
+    };
+    reader.readAsDataURL(file);
+  }
 
-      const reviewBox = document.getElementById('ai-review');
-      const badge = document.getElementById('loading-badge');
-      badge.classList.remove('hidden');
-      reviewBox.value = "料理を分析してレビューを作成中...";
+  async function generatePosts() {
+    if (!base64Image) return;
 
-      try {
-        const base64 = await fileToBase64(file);
-        const text = await generateReview(base64, file.type);
-        reviewBox.value = text;
-      } catch (err) {
-        console.error(err);
-        reviewBox.value = "解析に失敗しました。(" + err.message + ")";
-      } finally {
-        badge.classList.add('hidden');
-      }
-    }
+    const btn = document.getElementById('generateBtn');
+    const loading = document.getElementById('loading');
+    const resultSection = document.getElementById('resultSection');
 
-    function fileToBase64(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result.split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
+    btn.disabled = true;
+    loading.style.display = 'block';
+    resultSection.style.display = 'none';
 
-    async function generateReview(base64Data, mimeType) {
-     const prompt = `この料理の写真から、食欲をそそる魅力的な短文レビューを作成してください。
-【重要条件】
-- ハッシュタグ、推定カロリー、絵文字を含めた「全体の合計文字数を全角90〜100文字以内」に厳守すること。
-- X(Twitter)の140文字制限を絶対にオーバーしないこと。
-- 構成例：
-  一言絶賛レビュー（50字前後）
-  推定カロリー：約◯◯kcal
-  #料理名 #メシログ`;
+    // 自動判別＋短長文同時生成プロンプト
+    const promptText = `
+あなたはユーザー専属の有能な相棒AIです。
+渡された写真を解析し、以下の指示に厳格に従ってJSONフォーマットのみで出力してください。
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`;
-      
-      const res = await fetch(url, {
+【1. シーン自動判別】
+写真の内容を以下のいずれかに自動分類してください。
+- "食レポ" (料理・お酒・スイーツなど)
+- "風景・旅" (街並み・観光地・自然・ゴルフ場・車・移動など)
+- "ポートレート" (人物・自撮り・友人との記念など)
+- "日常" (ペット・小物・作業風景など)
+
+【2. トーン＆執筆ルール】
+気分タグ: "${selectedTag}"
+- 食レポの場合: 具材の質感や麺・脂のシズル感をプロ目線で称賛し、推定カロリーとハッシュタグを添える。
+- 風景・旅の場合: 光の差し込みや空気感、その場の情緒を短文日記にする。
+- ポートレート・日常の場合: 軽妙で人間味あふれる温かいコメントにする。
+
+【3. 出力フォーマット】
+以下のキーを持つ純粋なJSONのみを返してください（Markdownの\`\`\`json不要）。
+{
+  "category": "食レポ または 風景・旅 または ポートレート または 日常",
+  "short_text": "X用ポスト。120〜130文字以内厳守。ハッシュタグ付き。",
+  "long_text": "文字数制限なしの詳細レビュー・記録文。味や背景、ディテールを深掘りしたブログ・Googleマップ・アーカイブ用。"
+}
+`;
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{
             parts: [
-              { text: prompt },
-              { inline_data: { mime_type: mimeType, data: base64Data } }
+              { text: promptText },
+              { inline_data: { mime_type: "image/jpeg", data: base64Image } }
             ]
           }]
         })
       });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error?.message || "通信エラー");
-      }
+      const data = await response.json();
+      let rawText = data.candidates[0].content.parts[0].text;
+      rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const result = JSON.parse(rawText);
 
-      const data = await res.json();
-      return data.candidates[0].content.parts[0].text;
-    }
+      // 画面反映
+      document.getElementById('detectedMode').innerText = `🏷️ 自動判別: ${result.category}モード`;
+      document.getElementById('shortText').value = result.short_text;
+      document.getElementById('longText').value = result.long_text;
 
-    function sendReview() {
-      const text = document.getElementById('ai-review').value;
-      if (!text || text.includes("作成中")) {
-        alert("レビューが完成していません");
-        return;
-      }
-      // Xの投稿画面へ飛ばすワンタップ連携
-      const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
-      window.open(tweetUrl, '_blank');
+      // X投稿URLリンク更新
+      const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(result.short_text)}`;
+      document.getElementById('xPostBtn').href = tweetUrl;
+
+      // 端末内自動保存 (LocalStorage)
+      saveToHistory({
+        date: new Date().toLocaleString(),
+        category: result.category,
+        short_text: result.short_text,
+        long_text: result.long_text,
+        tag: selectedTag
+      });
+
+      resultSection.style.display = 'block';
+    } catch (err) {
+      alert("生成に失敗しました。APIキーまたは画像形式を確認してください。");
+      console.error(err);
+    } finally {
+      btn.disabled = false;
+      loading.style.display = 'none';
     }
-  </script>
+  }
+
+  function copyText(id) {
+    const el = document.getElementById(id);
+    el.select();
+    navigator.clipboard.writeText(el.value);
+    alert("コピーしました！");
+  }
+
+  function saveToHistory(record) {
+    try {
+      const history = JSON.parse(localStorage.getItem('my_life_logs') || '[]');
+      history.unshift(record);
+      if (history.length > 50) history.pop(); // 最新50件まで保持
+      localStorage.setItem('my_life_logs', JSON.stringify(history));
+    } catch (e) {
+      console.warn("履歴の保存に失敗しました", e);
+    }
+  }
+</script>
+
 </body>
 </html>
