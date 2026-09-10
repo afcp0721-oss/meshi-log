@@ -30,6 +30,10 @@
     .btn-main { width: 100%; background: #ea580c; color: white; border: none; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3); }
     .btn-main:disabled { background: #cbd5e1; cursor: not-allowed; box-shadow: none; }
 
+    .learn-badge-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; margin-bottom: 4px; }
+    .learn-status { font-size: 0.7rem; color: #0284c7; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+    .btn-reset-learn { background: none; border: none; font-size: 0.65rem; color: #94a3b8; cursor: pointer; text-decoration: underline; }
+
     .spinner-wrap { text-align: center; margin-top: 16px; display: none; }
     .spinner { width: 28px; height: 28px; border: 3px solid #fdba74; border-top-color: #ea580c; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 8px; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -38,7 +42,8 @@
     .result-section { margin-top: 20px; display: none; }
     .detected-mode { font-size: 0.75rem; font-weight: 700; color: #ea580c; background: #fff7ed; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 10px; }
     
-    .box-title { font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 6px; }
+    .box-title { font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+    .edit-hint { font-size: 0.65rem; font-weight: normal; color: #ea580c; }
     .output-box { width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 0.85rem; line-height: 1.5; color: #0f172a; resize: vertical; margin-bottom: 8px; background: #fafafa; }
     
     .action-row { display: flex; gap: 8px; margin-bottom: 16px; }
@@ -91,6 +96,11 @@
   <div class="step-title"><span class="badge">3</span> AIで同時生成</div>
   <button id="generateBtn" class="btn-main" onclick="generatePosts()" disabled>AIでコメントを作成する</button>
 
+  <div class="learn-badge-row">
+    <span id="learnStatus" class="learn-status">🧠 文体学習: 未学習（使うほど育ちます）</span>
+    <button id="resetLearnBtn" class="btn-reset-learn" onclick="resetLearnedStyle()" style="display: none;">学習リセット</button>
+  </div>
+
   <div id="spinnerWrap" class="spinner-wrap">
     <div class="spinner"></div>
     <div id="loadingText" class="loading-text">最大6枚を圧縮・解析中...</div>
@@ -99,10 +109,15 @@
   <div id="resultSection" class="result-section">
     <span id="detectedMode" class="detected-mode">🏷️ 自動判別中</span>
 
-    <div class="box-title">📱 X用（短文・130字以内）</div>
+    <div class="box-title">
+      <span>📱 X用（短文・130字以内）</span>
+      <span class="edit-hint">※直して保存するとAIが好みを学習します</span>
+    </div>
     <textarea id="shortText" class="output-box" rows="4"></textarea>
 
-    <div class="box-title">📝 詳細アーカイブ用（制限なし長文）</div>
+    <div class="box-title">
+      <span>📝 詳細アーカイブ用（制限なし長文）</span>
+    </div>
     <textarea id="longText" class="output-box" rows="7"></textarea>
 
     <div class="action-row">
@@ -135,6 +150,7 @@
     const target = document.querySelector(`.style-btn[data-style="${selectedStyle}"]`) || document.querySelector('.style-btn');
     if (target) selectStyle(target);
     renderHistory();
+    updateLearnStatusUI();
   });
 
   function selectTag(btn) {
@@ -148,6 +164,46 @@
     btn.classList.add('active');
     selectedStyle = btn.getAttribute('data-style');
     localStorage.setItem('user_post_style', selectedStyle);
+  }
+
+  function updateLearnStatusUI() {
+    const examples = JSON.parse(localStorage.getItem('my_ai_style_examples') || '[]');
+    const statusEl = document.getElementById('learnStatus');
+    const resetBtn = document.getElementById('resetLearnBtn');
+
+    if (examples.length === 0) {
+      statusEl.innerText = "🧠 文体学習: 0件（修正保存でオレ専用に成長）";
+      statusEl.style.color = "#64748b";
+      resetBtn.style.display = "none";
+    } else {
+      statusEl.innerText = `🧠 文体学習中: ${examples.length}件の好みを反映中`;
+      statusEl.style.color = "#0284c7";
+      resetBtn.style.display = "inline";
+    }
+  }
+
+  function resetLearnedStyle() {
+    if (confirm("学習した文体データをリセットしますか？")) {
+      localStorage.removeItem('my_ai_style_examples');
+      updateLearnStatusUI();
+      alert("文体学習をリセットしました。");
+    }
+  }
+
+  // ユーザーが手動で編集・確定した文章をお手本として最大5件記憶
+  function recordUserStyleExample(shortText, longText) {
+    try {
+      let examples = JSON.parse(localStorage.getItem('my_ai_style_examples') || '[]');
+      // 重複チェック
+      if (!examples.some(ex => ex.short === shortText)) {
+        examples.unshift({ short: shortText, long: longText, date: new Date().toISOString() });
+        if (examples.length > 5) examples.pop(); // 最新5件を保持
+        localStorage.setItem('my_ai_style_examples', JSON.stringify(examples));
+        updateLearnStatusUI();
+      }
+    } catch (e) {
+      console.warn("文体サンプルの保存に失敗しました", e);
+    }
   }
 
   function compressImage(file) {
@@ -221,9 +277,21 @@
       styleRule = "性別を問わないスマートで上質なトーン。感情を押しつけず、情景と良さを素直に伝える表現。";
     }
 
+    // 学習済みのお手本を取り出してプロンプトに注入
+    const examples = JSON.parse(localStorage.getItem('my_ai_style_examples') || '[]');
+    let personalizedPrompt = "";
+    if (examples.length > 0) {
+      personalizedPrompt = `
+【最重要：ユーザー専用の文体学習（お手本）】
+以下はユーザー本人が過去に手動修正して気に入った投稿の具体例です。
+このユーザー特有の「語尾、句読点、言葉のリズム、絵文字の使い方」を徹底的に真似して作成してください。
+${examples.map((ex, i) => `[お手本${i + 1}]\n短文: ${ex.short}\n長文: ${ex.long}`).join('\n\n')}
+`;
+    }
+
     const promptText = `
 あなたはユーザー本人の代わりにSNS投稿を作成するゴーストライターAIです。
-渡された写真（最大6枚）の全体を総合的に把握し、ユーザーが投稿する自然な文章を作成してください。
+渡された写真（最大6枚）の全体を総合的に把握し、ユーザー本人が投稿する自然な文章を作成してください。
 出力は指定のJSONフォーマットのみで行ってください。
 
 【1. 主役判定と複数枚の統合】
@@ -233,8 +301,9 @@
 
 【2. 執筆ルール】
 - 気分タグ: "${selectedTag}"
-- 文体指示: ${styleRule}
+- 基本文体指示: ${styleRule}
 - 視点: 必ず投稿者本人のつぶやき目線。「〜ですね」「お疲れ様です」といったAIからの話しかけ口調は厳禁。
+${personalizedPrompt}
 
 【3. 出力フォーマット】
 以下のキーを持つ純粋なJSONのみを返してください（Markdownブロック不要）。
@@ -300,9 +369,13 @@
   function copyBoth() {
     const shortVal = document.getElementById('shortText').value;
     const longVal = document.getElementById('longText').value;
+
+    // コピーした決定稿を文体学習のお手本として記録
+    recordUserStyleExample(shortVal, longVal);
+
     const combined = `【X用】\n${shortVal}\n\n【詳細ログ】\n${longVal}`;
     navigator.clipboard.writeText(combined);
-    alert("短文と長文の両方をコピーしました！");
+    alert("コピーしました！（直した文体をAIが学習しました）");
   }
 
   function saveToLocalHistory(record) {
@@ -362,6 +435,10 @@
   async function sendToDiscord() {
     const shortVal = document.getElementById('shortText').value;
     const longVal = document.getElementById('longText').value;
+
+    // Discordへ送った決定稿もお手本として学習
+    recordUserStyleExample(shortVal, longVal);
+
     const btn = document.getElementById('discordBtn');
     btn.disabled = true;
     btn.innerText = "画像と一緒に送信中...";
@@ -398,7 +475,7 @@
         body: formData
       });
       if (!res.ok) throw new Error("Discord送信エラー");
-      alert("写真とテキストをDiscordに保存しました！");
+      alert("写真とテキストをDiscordに保存しました！（直した文体もAIが学習しました）");
     } catch (e) {
       alert("Discord送信に失敗しました。");
       console.error(e);
