@@ -1,5 +1,4 @@
-const GEMINI_API_KEY = "AQ.Ab8RN6LVXXZj29RRtBS9eX4yFZIEtpAAKWxsrTgh8hhUp1uy-Q";
-const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1547649328829702236/wooY6kICkkTKbD4X00lIS2pQ6oBiizT1bjenjW51f8tbcC5pyA-fBqX3KviiGMnEuwIS";
+const RELAY_SERVER_URL = "https://icy-silence-6539.afcp0721.workers.dev";
 
 let imagesData = [];
 let selectedTag = "🔥 最高！";
@@ -27,7 +26,6 @@ function selectStyle(btn) {
   localStorage.setItem('user_post_style', selectedStyle);
 }
 
-// 過去のログから傾向を分析してひとこと声をかける
 function updateAiVoiceComment() {
   const history = JSON.parse(localStorage.getItem('my_life_logs') || '[]');
   const voiceEl = document.getElementById('aiVoiceText');
@@ -205,7 +203,7 @@ ${personalizedPrompt}
   });
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(`${RELAY_SERVER_URL}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contents: [{ parts }] })
@@ -213,7 +211,7 @@ ${personalizedPrompt}
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error ? errorData.error.message : "API通信エラー");
+      throw new Error(errorData.error ? errorData.error.message : "中継サーバー通信エラー");
     }
 
     const data = await response.json();
@@ -350,7 +348,7 @@ async function sendToDiscord() {
   }
 
   try {
-    const res = await fetch(DISCORD_WEBHOOK_URL, {
+    const res = await fetch(`${RELAY_SERVER_URL}/api/discord`, {
       method: "POST",
       body: formData
     });
