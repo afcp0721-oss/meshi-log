@@ -14,21 +14,17 @@
     .step-title { font-size: 0.85rem; font-weight: 700; color: #475569; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
     .badge { background: #ea580c; color: #fff; font-size: 0.7rem; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; }
 
-    /* Step 1: 写真アップロード */
     .upload-zone { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 16px; text-align: center; cursor: pointer; background: #f8fafc; margin-bottom: 16px; }
     .upload-zone input { display: none; }
     .preview-img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 8px; display: none; margin-top: 8px; }
 
-    /* Step 2: 気分タグ */
     .tag-container { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
     .tag-btn { border: 1px solid #cbd5e1; background: #ffffff; padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; cursor: pointer; }
     .tag-btn.active { background: #ea580c; color: #ffffff; border-color: #ea580c; font-weight: 700; }
 
-    /* Step 3: 送信ボタン */
     .btn-main { width: 100%; background: #ea580c; color: white; border: none; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3); }
     .btn-main:disabled { background: #cbd5e1; cursor: not-allowed; box-shadow: none; }
 
-    /* 結果表示エリア */
     .result-section { margin-top: 20px; display: none; }
     .detected-mode { font-size: 0.75rem; font-weight: 700; color: #ea580c; background: #fff7ed; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 10px; }
     
@@ -49,7 +45,6 @@
   <h1>メシログ & ライフログ</h1>
   <div class="sub">写真を選ぶだけでAIが自動判別して投稿作成</div>
 
-  <!-- STEP 1 -->
   <div class="step-title"><span class="badge">1</span> 写真を選ぶ（料理・風景・人物・日常）</div>
   <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
     <span id="uploadText">📷 タップして写真を選択</span>
@@ -57,7 +52,6 @@
     <img id="preview" class="preview-img" alt="プレビュー">
   </div>
 
-  <!-- STEP 2 -->
   <div class="step-title"><span class="badge">2</span> 今日の満足度・気分（任意）</div>
   <div class="tag-container" id="tagList">
     <button class="tag-btn active" onclick="selectTag(this)">🔥 最高！</button>
@@ -67,16 +61,13 @@
     <button class="tag-btn" onclick="selectTag(this)">👍 リピ確定</button>
   </div>
 
-  <!-- STEP 3 -->
   <div class="step-title"><span class="badge">3</span> AIで同時生成</div>
   <button id="generateBtn" class="btn-main" onclick="generatePosts()" disabled>AIでコメントを作成する</button>
   <div id="loading" class="loading">AIが写真を解析中...</div>
 
-  <!-- 結果表示 -->
   <div id="resultSection" class="result-section">
     <span id="detectedMode" class="detected-mode">🍜 食レポモード</span>
 
-    <!-- X短文エリア -->
     <div class="box-title">📱 X用（短文・130字以内）</div>
     <textarea id="shortText" class="output-box" rows="4"></textarea>
     <div class="action-row">
@@ -84,7 +75,6 @@
       <button class="btn-sub btn-copy" onclick="copyText('shortText')">コピー</button>
     </div>
 
-    <!-- 詳細長文エリア -->
     <div class="box-title">📝 詳細アーカイブ用（制限なし長文）</div>
     <textarea id="longText" class="output-box" rows="7"></textarea>
     <div class="action-row">
@@ -94,9 +84,9 @@
 </div>
 
 <script>
-  // ※お使いのGemini APIキーをセットしてください
   const GEMINI_API_KEY = "AQ.Ab8RN6LVXXZj29RRtBS9eX4yFZIEtpAAKWxsrTgh8hhUp1uy-Q";
   let base64Image = null;
+  let mimeType = "image/jpeg";
   let selectedTag = "🔥 最高！";
 
   function selectTag(btn) {
@@ -109,6 +99,7 @@
     const file = event.target.files[0];
     if (!file) return;
 
+    mimeType = file.type || "image/jpeg";
     const reader = new FileReader();
     reader.onload = function(e) {
       base64Image = e.target.result.split(',')[1];
@@ -132,7 +123,6 @@
     loading.style.display = 'block';
     resultSection.style.display = 'none';
 
-    // 自動判別＋短長文同時生成プロンプト
     const promptText = `
 あなたはユーザー専属の有能な相棒AIです。
 渡された写真を解析し、以下の指示に厳格に従ってJSONフォーマットのみで出力してください。
@@ -151,12 +141,8 @@
 - ポートレート・日常の場合: 軽妙で人間味あふれる温かいコメントにする。
 
 【3. 出力フォーマット】
-以下のキーを持つ純粋なJSONのみを返してください（Markdownの\`\`\`json不要）。
-{
-  "category": "食レポ または 風景・旅 または ポートレート または 日常",
-  "short_text": "X用ポスト。120〜130文字以内厳守。ハッシュタグ付き。",
-  "long_text": "文字数制限なしの詳細レビュー・記録文。味や背景、ディテールを深掘りしたブログ・Googleマップ・アーカイブ用。"
-}
+以下のキーを持つ純粋なJSONのみを返してください。余計な解説や\`\`\`jsonなどのマークダウン記法は含めないでください。
+{"category":"食レポ","short_text":"X用短文130字以内","long_text":"詳細長文"}
 `;
 
     try {
@@ -167,27 +153,29 @@
           contents: [{
             parts: [
               { text: promptText },
-              { inline_data: { mime_type: "image/jpeg", data: base64Image } }
+              { inline_data: { mime_type: mimeType, data: base64Image } }
             ]
           }]
         })
       });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error ? errorData.error.message : "API通信エラー");
+      }
 
       const data = await response.json();
       let rawText = data.candidates[0].content.parts[0].text;
       rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
       const result = JSON.parse(rawText);
 
-      // 画面反映
       document.getElementById('detectedMode').innerText = `🏷️ 自動判別: ${result.category}モード`;
       document.getElementById('shortText').value = result.short_text;
       document.getElementById('longText').value = result.long_text;
 
-      // X投稿URLリンク更新
       const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(result.short_text)}`;
       document.getElementById('xPostBtn').href = tweetUrl;
 
-      // 端末内自動保存 (LocalStorage)
       saveToHistory({
         date: new Date().toLocaleString(),
         category: result.category,
@@ -198,7 +186,7 @@
 
       resultSection.style.display = 'block';
     } catch (err) {
-      alert("生成に失敗しました。APIキーまたは画像形式を確認してください。");
+      alert("エラー詳細: " + err.message);
       console.error(err);
     } finally {
       btn.disabled = false;
@@ -217,7 +205,7 @@
     try {
       const history = JSON.parse(localStorage.getItem('my_life_logs') || '[]');
       history.unshift(record);
-      if (history.length > 50) history.pop(); // 最新50件まで保持
+      if (history.length > 50) history.pop();
       localStorage.setItem('my_life_logs', JSON.stringify(history));
     } catch (e) {
       console.warn("履歴の保存に失敗しました", e);
