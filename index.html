@@ -295,13 +295,14 @@
     }
   }
 
-  async function sendToDiscord() {
+ async function sendToDiscord() {
     const shortVal = document.getElementById('shortText').value;
     const longVal = document.getElementById('longText').value;
     const btn = document.getElementById('discordBtn');
     btn.disabled = true;
-    btn.innerText = "送信中...";
+    btn.innerText = "画像と一緒に送信中...";
 
+    // テキスト情報をEmbedカードとして作成
     const payload = {
       embeds: [{
         title: `📸 ${currentCategory}ログ（${selectedTag}）`,
@@ -314,14 +315,29 @@
       }]
     };
 
+    // 画像とテキストをまとめるFormDataを作成
+    const formData = new FormData();
+    formData.append("payload_json", JSON.stringify(payload));
+
+    // 圧縮済みの画像を添付ファイルとして追加
+    for (let i = 0; i < imagesData.length; i++) {
+      const byteCharacters = atob(imagesData[i].base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let j = 0; j < byteCharacters.length; j++) {
+        byteNumbers[j] = byteCharacters.charCodeAt(j);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: imagesData[i].mimeType });
+      formData.append(`files[${i}]`, blob, `photo_${i + 1}.jpg`);
+    }
+
     try {
       const res = await fetch(DISCORD_WEBHOOK_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: formData // Content-Typeヘッダーはブラウザが自動付与
       });
       if (!res.ok) throw new Error("Discord送信エラー");
-      alert("Discordへの保存が完了しました！");
+      alert("写真とテキストをDiscordに保存しました！");
     } catch (e) {
       alert("Discord送信に失敗しました。");
       console.error(e);
