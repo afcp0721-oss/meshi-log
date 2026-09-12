@@ -49,7 +49,7 @@ function showMainUI(isFirst = false) {
   const voiceEl = document.getElementById('aiVoiceBubble');
 
   if (isFirst) {
-    voiceEl.innerText = `よろしく、${userCall}！私のことも${aiName}って呼んでくれてありがとう！記念すべき1食目を見せてよ。`;
+    voiceEl.innerText = `よろしく、${userCall}！私のことも${aiName}って呼んでくれてありがとう！記念すべき1枚目を見せてよ。`;
   } else {
     voiceEl.innerText = `${userCall}、お腹空いた！今日のウマい飯、${aiName}に見せて？`;
   }
