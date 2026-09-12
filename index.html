@@ -85,15 +85,20 @@
     </div>
   </div>
 
-  <!-- メイン操作画面 -->
+ <!-- メイン操作画面 -->
   <div id="mainCard" class="card">
     <div class="header-bar">
-      <span id="headerAiTitle" style="font-size: 0.85rem; font-weight: bold; color: #94a3b8;">専属AI: 相棒</span>
+      <div>
+        <div class="title" style="margin-bottom: 2px;">🍽️ めしログ＆ライフログ</div>
+        <span id="headerAiTitle" style="font-size: 0.8rem; font-weight: bold; color: #94a3b8;">専属AI: 相棒</span>
+      </div>
       <div>
         <button class="btn-gear" onclick="loadMealHistory()">📖 過去ログ</button>
         <button class="btn-gear" onclick="openSettings()">⚙️ 設定</button>
       </div>
     </div>
+
+    <div id="aiVoiceBubble" class="bubble"></div>
 
     <div id="aiVoiceBubble" class="bubble"></div>
 
