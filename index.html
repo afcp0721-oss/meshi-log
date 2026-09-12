@@ -28,21 +28,29 @@
 <body>
 
 <div class="app-container">
+  <!-- ================= オンボーディング画面 ================= -->
   <div id="onboardingCard" class="card" style="display: none;">
     <div class="title">🤝 相棒を決めよう</div>
     <div class="desc">これからあなたの食事と生活を記録する専属AIの呼び名と、あなたの呼ばれ方を設定します。</div>
 
-    <label>AIの名前</label>
-    <input type="text" id="aiNameInput" placeholder="例：ララ, 相棒" value="ララ">
+    <label>AIの名前（呼び名）</label>
+    <input type="text" id="aiNameInput" placeholder="例：メシ友, 相棒" value="相棒">
+
+    <div class="chip-wrap" style="margin-bottom: 12px;">
+      <span class="chip" onclick="setAiName('相棒')">相棒</span>
+      <span class="chip" onclick="setAiName('メシ友')">メシ友</span>
+      <span class="chip" onclick="setAiName('めしログ君')">めしログ君</span>
+      <span class="chip" onclick="setAiName('バディ')">バディ</span>
+    </div>
 
     <label>あなたの呼ばれ方</label>
-    <input type="text" id="userCallInput" placeholder="例：ボス, 大将" value="ボス">
+    <input type="text" id="userCallInput" placeholder="例：ボス, 隊長" value="ボス">
 
     <div class="chip-wrap">
       <span class="chip" onclick="setCall('ボス')">ボス</span>
-      <span class="chip" onclick="setCall('大将')">大将</span>
+      <span class="chip" onclick="setCall('隊長')">隊長</span>
       <span class="chip" onclick="setCall('アニキ')">アニキ</span>
-      <span class="chip" onclick="setCall('神様')">神様</span>
+      <span class="chip" onclick="setCall('マスター')">マスター</span>
     </div>
 
     <button class="btn-main" onclick="saveRelationship()">この設定でスタート！</button>
