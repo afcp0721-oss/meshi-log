@@ -414,7 +414,7 @@ async function handleGoogleLogin(response) {
     const res = await fetch(`${RELAY_SERVER_URL}/api/auth/google`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ credential: response.credential, currentUserId: getUserId })
+      body: JSON.stringify({ credential: response.credential, currentUserId: UserId })
     });
     const data = await res.json();
     if (data.success && data.userId) {
