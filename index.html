@@ -70,15 +70,29 @@
       <span class="chip" onclick="setCall('マスター')">マスター</span>
     </div>
 
-    <button class="btn-main" onclick="saveRelationship()">設定を保存する</button>
+   <button class="btn-main" onclick="saveRelationship()">設定を保存する</button>
     <button class="btn-sub" onclick="skipSettings()">閉じる</button>
+  </div>
+
+  <!-- 過去ログ一覧モーダル -->
+  <div id="historyModal" class="card" style="display: none;">
+    <div class="header-bar">
+      <div class="title" style="margin-bottom: 0;">📖 保存されたメシログ</div>
+      <button class="btn-gear" onclick="closeHistory()">✕ 閉じる</button>
+    </div>
+    <div id="historyList" style="margin-top: 12px; display: flex; flex-direction: column; gap: 12px; max-height: 60vh; overflow-y: auto;">
+      <!-- ここにD1のログが並びます -->
+    </div>
   </div>
 
   <!-- メイン操作画面 -->
   <div id="mainCard" class="card">
     <div class="header-bar">
       <span id="headerAiTitle" style="font-size: 0.85rem; font-weight: bold; color: #94a3b8;">専属AI: 相棒</span>
-      <button class="btn-gear" onclick="openSettings()">⚙️ 設定変更</button>
+      <div>
+        <button class="btn-gear" onclick="loadMealHistory()">📖 過去ログ</button>
+        <button class="btn-gear" onclick="openSettings()">⚙️ 設定</button>
+      </div>
     </div>
 
     <div id="aiVoiceBubble" class="bubble"></div>
