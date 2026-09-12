@@ -139,9 +139,11 @@ function renderPreviews() {
     grid.appendChild(box);
   });
 
-  const analyzeBtn = document.getElementById('btnAnalyze');
+ const analyzeBtn = document.getElementById('btnAnalyze');
   if (analyzeBtn) {
-    analyzeBtn.style.display = imagesData.length > 0 ? 'block' : 'none';
+    analyzeBtn.disabled = true;
+    analyzeBtn.innerHTML = '⏳ 解析中…（相棒がじっくり確認中）';
+    analyzeBtn.style.opacity = '0.6';
   }
 }
 
