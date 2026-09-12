@@ -154,7 +154,7 @@ function removeImage(index) {
 }
 
 async function analyzeImages() {
-  if (!imagesData.length) return;
+  if (!imagesData.length) return;　
 
   const voiceEl = document.getElementById('aiVoiceBubble');
   const alertEl = document.getElementById('safetyAlert');
