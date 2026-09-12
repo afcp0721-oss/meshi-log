@@ -1,3 +1,155 @@
+const RELAY_SERVER_URL = "https://icy-silence-6539.afcp0721.workers.dev";
+
+let userId = localStorage.getItem('meshi_user_id');
+let aiName = localStorage.getItem('meshi_ai_name') || '相棒';
+let userCall = localStorage.getItem('meshi_user_call') || 'ボス';
+let selectedMood = '最高';
+let selectedLength = 'short';
+let imagesData = [];
+let currentLog = null;
+
+window.addEventListener('DOMContentLoaded', () => {
+  if (!userId) {
+    userId = 'usr_' + Math.random().toString(36).substring(2, 10);
+    localStorage.setItem('meshi_user_id', userId);
+  }
+  updateHeader();
+  greet();
+});
+
+function updateHeader() {
+  const headerEl = document.getElementById('headerAiTitle');
+  if (headerEl) headerEl.innerText = `専属AI: ${aiName}`;
+}
+
+function greet() {
+  const voiceEl = document.getElementById('aiVoiceBubble');
+  if (voiceEl) voiceEl.innerText = `${userCall}、今日のウマい飯、${aiName}に見せて？`;
+}
+
+function setAiName(name) { document.getElementById('aiNameInput').value = name; }
+function setCall(call) { document.getElementById('userCallInput').value = call; }
+
+function openSettings() {
+  document.getElementById('aiNameInput').value = aiName;
+  document.getElementById('userCallInput').value = userCall;
+  document.getElementById('settingsCard').style.display = 'block';
+  document.getElementById('mainCard').style.display = 'none';
+}
+
+function skipSettings() {
+  document.getElementById('settingsCard').style.display = 'none';
+  document.getElementById('mainCard').style.display = 'block';
+}
+
+async function saveRelationship() {
+  aiName = document.getElementById('aiNameInput').value.trim() || '相棒';
+  userCall = document.getElementById('userCallInput').value.trim() || 'ボス';
+
+  localStorage.setItem('meshi_ai_name', aiName);
+  localStorage.setItem('meshi_user_call', userCall);
+
+  updateHeader();
+  skipSettings();
+  greet();
+
+  await fetch(`${RELAY_SERVER_URL}/api/user`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, aiName, userCall })
+  }).catch(() => {});
+}
+
+function selectMood(el, mood) {
+  document.querySelectorAll('#moodChips .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  selectedMood = mood;
+}
+
+function selectLength(el, len) {
+  document.querySelectorAll('#lengthChips .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  selectedLength = len;
+  
+  if (currentLog) {
+    document.getElementById('xPostText').value = len === 'short' ? currentLog.x_post_short : currentLog.x_post_long;
+    updateXLink(document.getElementById('xPostText').value);
+  }
+}
+
+function compressImage(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 1200;
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+          else { w = Math.round((w * maxDim) / h); h = maxDim; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        resolve({ dataUrl, base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleImages(event) {
+  const files = Array.from(event.target.files).slice(0, 6);
+  if (!files.length) return;
+
+  for (const f of files) {
+    if (imagesData.length >= 6) break;
+    const comp = await compressImage(f);
+    imagesData.push(comp);
+  }
+  renderPreviews();
+}
+
+function renderPreviews() {
+  const grid = document.getElementById('previewGrid');
+  grid.innerHTML = '';
+
+  imagesData.forEach((img, idx) => {
+    const box = document.createElement('div');
+    box.className = 'thumb-box';
+
+    const thumb = document.createElement('img');
+    thumb.src = img.dataUrl;
+    thumb.className = 'preview-thumb';
+
+    const delBtn = document.createElement('div');
+    delBtn.className = 'del-badge';
+    delBtn.innerText = '✕';
+    delBtn.onclick = () => removeImage(idx);
+
+    box.appendChild(thumb);
+    box.appendChild(delBtn);
+    grid.appendChild(box);
+  });
+
+  const analyzeBtn = document.getElementById('btnAnalyze');
+  if (analyzeBtn) {
+    analyzeBtn.style.display = imagesData.length > 0 ? 'block' : 'none';
+  }
+}
+
+function removeImage(index) {
+  imagesData.splice(index, 1);
+  renderPreviews();
+  if (imagesData.length === 0) {
+    document.getElementById('resultSection').style.display = 'none';
+  }
+}
+
 async function analyzeImages() {
   if (!imagesData.length) return;
 
@@ -7,7 +159,6 @@ async function analyzeImages() {
   const shareBtn = document.getElementById('xShareBtn');
   const analyzeBtn = document.getElementById('btnAnalyze');
 
-  // 解析開始：ボタンをローディング表示にする
   if (analyzeBtn) {
     analyzeBtn.disabled = true;
     analyzeBtn.innerHTML = '⏳ 解析中…（相棒がじっくり確認中）';
@@ -73,7 +224,6 @@ async function analyzeImages() {
 
     resultSec.style.display = 'block';
 
-    // 成功時：ボタンを元に戻す
     if (analyzeBtn) {
       analyzeBtn.disabled = false;
       analyzeBtn.innerHTML = '🔍 この写真で解析する';
@@ -83,11 +233,75 @@ async function analyzeImages() {
     voiceEl.innerText = "うーん、解析でエラーが出ちゃった！もう一度試してみて。";
     console.error(err);
 
-    // エラー時：ボタンを元に戻す
     if (analyzeBtn) {
       analyzeBtn.disabled = false;
       analyzeBtn.innerHTML = '🔍 この写真で解析する';
       analyzeBtn.style.opacity = '1';
     }
   }
+}
+
+function updateXLink(text) {
+  const shareBtn = document.getElementById('xShareBtn');
+  shareBtn.href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+}
+
+document.getElementById('xPostText').addEventListener('input', (e) => {
+  updateXLink(e.target.value);
+});
+
+async function saveToCloudAndDiscord() {
+  if (!currentLog) return;
+
+  const editedPost = document.getElementById('xPostText').value;
+  const mealId = 'meal_' + Date.now();
+
+  await fetch(`${RELAY_SERVER_URL}/api/save-log`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      userId,
+      mealId,
+      aiComment: currentLog.ai_comment,
+      xPostText: editedPost,
+      bestIdx: currentLog.best_image_idx || 0
+    })
+  });
+
+  const payload = {
+    embeds: [{
+      title: `🍽️ ${userCall}のメシログ（AI: ${aiName}）`,
+      color: 15339532,
+      description: `**気分:** ${selectedMood}\n**${aiName}のツッコミ:**\n${currentLog.ai_comment}`,
+      fields: [{ name: "📱 Xポスト内容", value: editedPost }],
+      footer: { text: `User ID: ${userId} | ${new Date().toLocaleString()}` }
+    }]
+  };
+
+  const formData = new FormData();
+  formData.append("payload_json", JSON.stringify(payload));
+
+  imagesData.forEach((img, i) => {
+    const byteChars = atob(img.base64);
+    const byteNums = new Array(byteChars.length);
+    for (let j = 0; j < byteChars.length; j++) byteNums[j] = byteChars.charCodeAt(j);
+    const blob = new Blob([new Uint8Array(byteNums)], { type: img.mimeType });
+    formData.append(`files[${i}]`, blob, `meal_${i + 1}.jpg`);
+  });
+
+  await fetch(`${RELAY_SERVER_URL}/api/discord`, { method: "POST", body: formData });
+
+  alert("D1データベースとDiscordに保存完了しました！");
+  resetAll();
+}
+
+function resetAll() {
+  imagesData = [];
+  currentLog = null;
+  document.getElementById('previewGrid').innerHTML = '';
+  document.getElementById('btnAnalyze').style.display = 'none';
+  document.getElementById('resultSection').style.display = 'none';
+  document.getElementById('safetyAlert').style.display = 'none';
+  document.getElementById('fileInput').value = '';
+  greet();
 }
