@@ -1,87 +1,53 @@
 const RELAY_SERVER_URL = "https://icy-silence-6539.afcp0721.workers.dev";
 
+let userId = localStorage.getItem('meshi_user_id');
+let aiName = localStorage.getItem('meshi_ai_name') || 'ララ';
+let userCall = localStorage.getItem('meshi_user_call') || 'ボス';
 let imagesData = [];
-let selectedTag = "🔥 最高！";
-let selectedStyle = localStorage.getItem('user_post_style') || 'natural';
-let currentCategory = "";
+let currentLog = null;
 
 window.addEventListener('DOMContentLoaded', () => {
-  const target = document.querySelector(`.style-btn[data-style="${selectedStyle}"]`) || document.querySelector('.style-btn');
-  if (target) selectStyle(target);
-  renderHistory();
-  updateLearnStatusUI();
-  updateAiVoiceComment();
+  if (!userId) {
+    userId = 'usr_' + Math.random().toString(36).substring(2, 10);
+    localStorage.setItem('meshi_user_id', userId);
+  }
+
+  if (!localStorage.getItem('meshi_ai_name')) {
+    document.getElementById('onboardingCard').style.display = 'block';
+  } else {
+    showMainUI();
+  }
 });
 
-function selectTag(btn) {
-  document.querySelectorAll('.tag-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  selectedTag = btn.innerText;
+function setCall(call) {
+  document.getElementById('userCallInput').value = call;
 }
 
-function selectStyle(btn) {
-  document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  selectedStyle = btn.getAttribute('data-style');
-  localStorage.setItem('user_post_style', selectedStyle);
+async function saveRelationship() {
+  aiName = document.getElementById('aiNameInput').value.trim() || 'ララ';
+  userCall = document.getElementById('userCallInput').value.trim() || 'ボス';
+
+  localStorage.setItem('meshi_ai_name', aiName);
+  localStorage.setItem('meshi_user_call', userCall);
+
+  await fetch(`${RELAY_SERVER_URL}/api/user`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, aiName, userCall })
+  });
+
+  document.getElementById('onboardingCard').style.display = 'none';
+  showMainUI(true);
 }
 
-function updateAiVoiceComment() {
-  const history = JSON.parse(localStorage.getItem('my_life_logs') || '[]');
-  const voiceEl = document.getElementById('aiVoiceText');
-  if (!history.length) {
-    voiceEl.innerText = "写真をセットするとAIが好みを学習します！何でも気軽に投稿してみてね。";
-    return;
-  }
+function showMainUI(isFirst = false) {
+  document.getElementById('mainCard').style.display = 'block';
+  const voiceEl = document.getElementById('aiVoiceBubble');
 
-  const recentCategories = history.slice(0, 5).map(h => h.category);
-  const foodCount = recentCategories.filter(c => c.includes("食レポ")).length;
-  const tripCount = recentCategories.filter(c => c.includes("風景") || c.includes("旅")).length;
-
-  if (foodCount >= 3) {
-    voiceEl.innerText = `最近美味しいごはんの投稿が続いてますね（直近5回中${foodCount}回）！食へのこだわり、しっかり学習してますよ😋`;
-  } else if (tripCount >= 2) {
-    voiceEl.innerText = "最近お出かけやドライブが多いですね！移動お疲れ様です、安全運転で🚗✨";
+  if (isFirst) {
+    voiceEl.innerText = `よろしく、${userCall}！私のことも${aiName}って呼んでくれてありがとう！記念すべき1食目を見せてよ。`;
   } else {
-    voiceEl.innerText = `現在${history.length}件の記録を保持しています。使っていくほどあなた専用に育ちますよ！`;
-  }
-}
-
-function updateLearnStatusUI() {
-  const examples = JSON.parse(localStorage.getItem('my_ai_style_examples') || '[]');
-  const statusEl = document.getElementById('learnStatus');
-  const resetBtn = document.getElementById('resetLearnBtn');
-
-  if (examples.length === 0) {
-    statusEl.innerText = "🧠 文体学習: 0件（修正保存であなた専用に成長）";
-    statusEl.style.color = "#64748b";
-    resetBtn.style.display = "none";
-  } else {
-    statusEl.innerText = `🧠 文体学習中: ${examples.length}件の好みを反映中`;
-    statusEl.style.color = "#0284c7";
-    resetBtn.style.display = "inline";
-  }
-}
-
-function resetLearnedStyle() {
-  if (confirm("学習した文体データをリセットしますか？")) {
-    localStorage.removeItem('my_ai_style_examples');
-    updateLearnStatusUI();
-    alert("文体学習をリセットしました。");
-  }
-}
-
-function recordUserStyleExample(shortText, longText) {
-  try {
-    let examples = JSON.parse(localStorage.getItem('my_ai_style_examples') || '[]');
-    if (!examples.some(ex => ex.short === shortText)) {
-      examples.unshift({ short: shortText, long: longText, date: new Date().toISOString() });
-      if (examples.length > 5) examples.pop();
-      localStorage.setItem('my_ai_style_examples', JSON.stringify(examples));
-      updateLearnStatusUI();
-    }
-  } catch (e) {
-    console.warn("文体サンプルの保存に失敗しました", e);
+    voiceEl.innerText = `${userCall}、お腹空いた！今日のウマい飯、${aiName}に見せて？`;
   }
 }
 
@@ -103,7 +69,7 @@ function compressImage(file) {
         ctx.drawImage(img, 0, 0, w, h);
         const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
         resolve({
-          dataUrl: dataUrl,
+          dataUrl,
           base64: dataUrl.split(',')[1],
           mimeType: 'image/jpeg'
         });
@@ -114,7 +80,7 @@ function compressImage(file) {
   });
 }
 
-async function handleMultipleImages(event) {
+async function handleImages(event) {
   const files = Array.from(event.target.files).slice(0, 6);
   if (!files.length) return;
 
@@ -125,240 +91,133 @@ async function handleMultipleImages(event) {
   for (const f of files) {
     const comp = await compressImage(f);
     imagesData.push(comp);
-
     const thumb = document.createElement('img');
     thumb.src = comp.dataUrl;
     thumb.className = 'preview-thumb';
     grid.appendChild(thumb);
   }
 
-  document.getElementById('uploadText').innerText = `📷 ${imagesData.length}枚選択中（タップで変更）`;
-  document.getElementById('generateBtn').disabled = false;
+  analyzeImages();
 }
 
-async function generatePosts() {
-  if (!imagesData.length) return;
+async function analyzeImages() {
+  const voiceEl = document.getElementById('aiVoiceBubble');
+  const alertEl = document.getElementById('safetyAlert');
+  const resultSec = document.getElementById('resultSection');
+  const shareBtn = document.getElementById('xShareBtn');
 
-  const btn = document.getElementById('generateBtn');
-  const spinnerWrap = document.getElementById('spinnerWrap');
-  const resultSection = document.getElementById('resultSection');
+  voiceEl.innerText = `解析中… ${aiName}がじっくり見てるからちょっと待っててね！`;
+  alertEl.style.display = 'none';
+  resultSec.style.display = 'none';
 
-  btn.disabled = true;
-  spinnerWrap.style.display = 'block';
-  resultSection.style.display = 'none';
+  const prompt = `
+あなたは${userCall}の専属AI「${aiName}」です。32歳くらいのしっかり者で、ストレートかつユーモアを交えて話します。
+渡された写真（最大6枚）を解析し、純粋なJSONのみを出力してください。
 
-  let styleRule = "";
-  if (selectedStyle === 'dandy') {
-    styleRule = "落ち着いた大人の男目線。「〜だ」「〜だな」といった静かな味わい深さやこだわりを重視。";
-  } else if (selectedStyle === 'lady') {
-    styleRule = "明るく軽やかな共感トーン。「〜♪」「〜でした！」といった親しみやすく華やかな表現。";
-  } else {
-    styleRule = "性別を問わないスマートで上質なトーン。感情を押しつけず、情景と良さを素直に伝える表現。";
-  }
+【最重要・機密情報セキュリティ判定】
+写真内に料理以外の個人情報（レシート・領収書・クレジットカード・機密書類・免許証・他人の顔の明確な写り込みなど）が存在するか厳重にチェックしてください。
 
-  const examples = JSON.parse(localStorage.getItem('my_ai_style_examples') || '[]');
-  let personalizedPrompt = "";
-  if (examples.length > 0) {
-    personalizedPrompt = `
-【最重要：ユーザー専用の文体学習（お手本）】
-以下はユーザー本人が過去に手動修正して確定させた投稿の具体例です。
-このユーザー特有の「語尾、句読点、言葉のリズム、絵文字の使い方」を徹底的に真似して作成してください。
-${examples.map((ex, i) => `[お手本${i + 1}]\n短文: ${ex.short}\n長文: ${ex.long}`).join('\n\n')}
-`;
-  }
-
-  const promptText = `
-あなたはユーザー本人の代わりにSNS投稿を作成するゴーストライターAIです。
-渡された写真（最大6枚）の全体を総合的に把握し、ユーザー本人が投稿する自然な文章を作成してください。
-出力は指定のJSONフォーマットのみで行ってください。
-
-【1. 主役判定と複数枚の統合】
-- 看板、外観、料理、人物、風景などが混在している場合は全体を1つのストーリーとして統合してください。
-- 人物が写っている場合は、料理があっても「楽しそうな食事会・団らんのひとコマ」を優先してください。
-- 写真に写っていない味や架空のメニューを勝手に捏造しないでください。
-
-【2. 執筆ルール】
-- 気分タグ: "${selectedTag}"
-- 基本文体指示: ${styleRule}
-- 視点: 必ず投稿者本人のつぶやき目線。「〜ですね」「お疲れ様です」といったAIからの話しかけ口調は厳禁。
-${personalizedPrompt}
-
-【3. 出力フォーマット】
-以下のキーを持つ純粋なJSONのみを返してください（Markdownブロック不要）。
+【出力JSONフォーマット】
 {
-  "category": "食レポ または 風景・旅 または 人物・団らん または 日常",
-  "short_text": "X用ポスト。120〜130文字以内。ハッシュタグ付き。",
-  "long_text": "詳細アーカイブ文。ブログや記録用の自然な長文。"
+  "has_sensitive_data": true または false,
+  "safety_warning": "機密情報や顔がある場合の警告文。問題なければ空文字",
+  "ai_comment": "${aiName}としてのツッコミ・感想（${userCall}と呼びかけること）",
+  "x_post_text": "X用ポスト文（120文字前後、絵文字とハッシュタグ含む。本人が投稿する自然な口調）",
+  "best_image_idx": 0
 }
 `;
 
-  const parts = [{ text: promptText }];
+  const parts = [{ text: prompt }];
   imagesData.forEach(img => {
     parts.push({
-      inline_data: {
-        mime_type: img.mimeType,
-        data: img.base64
-      }
+      inline_data: { mime_type: img.mimeType, data: img.base64 }
     });
   });
 
   try {
-    const response = await fetch(`${RELAY_SERVER_URL}/api/generate`, {
+    const res = await fetch(`${RELAY_SERVER_URL}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contents: [{ parts }] })
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error ? errorData.error.message : "中継サーバー通信エラー");
-    }
-
-    const data = await response.json();
+    const data = await res.json();
     let rawText = data.candidates[0].content.parts[0].text;
     rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
     const result = JSON.parse(rawText);
 
-    currentCategory = result.category;
-    document.getElementById('detectedMode').innerText = `🏷️ 自動判別: ${result.category}モード`;
-    document.getElementById('shortText').value = result.short_text;
-    document.getElementById('longText').value = result.long_text;
+    currentLog = result;
+    voiceEl.innerText = result.ai_comment;
+    document.getElementById('xPostText').value = result.x_post_text;
 
-    saveToLocalHistory({
-      date: new Date().toLocaleString([], { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
-      category: result.category,
-      short_text: result.short_text,
-      long_text: result.long_text,
-      tag: selectedTag,
-      style: selectedStyle,
-      imageCount: imagesData.length
-    });
+    if (result.has_sensitive_data) {
+      alertEl.innerText = `⚠️ 警告: ${result.safety_warning}\n個人情報保護のため、X共有ボタンを無効化しています。`;
+      alertEl.style.display = 'block';
+      shareBtn.style.pointerEvents = 'none';
+      shareBtn.style.opacity = '0.3';
+    } else {
+      shareBtn.style.pointerEvents = 'auto';
+      shareBtn.style.opacity = '1';
+      updateXLink(result.x_post_text);
+    }
 
-    resultSection.style.display = 'block';
+    resultSec.style.display = 'block';
   } catch (err) {
-    alert("エラー詳細: " + err.message);
+    voiceEl.innerText = "うーん、解析でエラーが出ちゃった！もう一度試してみて。";
     console.error(err);
-  } finally {
-    btn.disabled = false;
-    spinnerWrap.style.display = 'none';
   }
 }
 
-function copyBoth() {
-  const shortVal = document.getElementById('shortText').value;
-  const longVal = document.getElementById('longText').value;
-
-  recordUserStyleExample(shortVal, longVal);
-
-  const combined = `【X用】\n${shortVal}\n\n【詳細ログ】\n${longVal}`;
-  navigator.clipboard.writeText(combined);
-  alert("コピーしました！（直した文体をAIが学習しました）");
+function updateXLink(text) {
+  const shareBtn = document.getElementById('xShareBtn');
+  shareBtn.href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
 }
 
-function saveToLocalHistory(record) {
-  try {
-    const history = JSON.parse(localStorage.getItem('my_life_logs') || '[]');
-    history.unshift(record);
-    if (history.length > 50) history.pop();
-    localStorage.setItem('my_life_logs', JSON.stringify(history));
-    renderHistory();
-    updateAiVoiceComment();
-  } catch (e) {
-    console.warn("ローカル保存に失敗しました", e);
-  }
-}
+document.getElementById('xPostText').addEventListener('input', (e) => {
+  updateXLink(e.target.value);
+});
 
-function renderHistory() {
-  const listEl = document.getElementById('historyList');
-  const badgeEl = document.getElementById('historyCountBadge');
-  const history = JSON.parse(localStorage.getItem('my_life_logs') || '[]');
-  
-  badgeEl.innerText = `${history.length}件`;
-  if (!history.length) {
-    listEl.innerHTML = '<div style="font-size: 0.75rem; color: #94a3b8; text-align: center; padding: 10px;">まだ保存されたログがありません</div>';
-    return;
-  }
+async function saveToCloudAndDiscord() {
+  if (!currentLog) return;
 
-  listEl.innerHTML = history.slice(0, 10).map((item, idx) => `
-    <div class="history-card">
-      <div class="history-header">
-        <span><span class="history-badge">${item.category}</span> ${item.tag}</span>
-        <span>${item.date}</span>
-      </div>
-      <div class="history-text"><strong>X用:</strong> ${item.short_text}</div>
-      <div class="history-btn-row">
-        <button class="btn-mini-copy" onclick="copyHistoryItem(${idx}, 'short')">短文コピー</button>
-        <button class="btn-mini-copy" onclick="copyHistoryItem(${idx}, 'long')">長文コピー</button>
-      </div>
-    </div>
-  `).join('');
-}
+  const editedPost = document.getElementById('xPostText').value;
+  const mealId = 'meal_' + Date.now();
 
-function copyHistoryItem(index, type) {
-  const history = JSON.parse(localStorage.getItem('my_life_logs') || '[]');
-  const item = history[index];
-  if (!item) return;
-  const text = type === 'short' ? item.short_text : item.long_text;
-  navigator.clipboard.writeText(text);
-  alert(`${type === 'short' ? '短文' : '長文'}をコピーしました！`);
-}
-
-function clearHistory() {
-  if (confirm("スマホ内の履歴をすべて削除しますか？")) {
-    localStorage.removeItem('my_life_logs');
-    renderHistory();
-    updateAiVoiceComment();
-  }
-}
-
-async function sendToDiscord() {
-  const shortVal = document.getElementById('shortText').value;
-  const longVal = document.getElementById('longText').value;
-
-  recordUserStyleExample(shortVal, longVal);
-
-  const btn = document.getElementById('discordBtn');
-  btn.disabled = true;
-  btn.innerText = "画像と一緒に送信中...";
+  await fetch(`${RELAY_SERVER_URL}/api/save-log`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      userId,
+      mealId,
+      aiComment: currentLog.ai_comment,
+      xPostText: editedPost,
+      bestIdx: currentLog.best_image_idx || 0
+    })
+  });
 
   const payload = {
     embeds: [{
-      title: `📸 ${currentCategory}ログ（${selectedTag}）`,
+      title: `🍽️ ${userCall}のメシログ（AI: ${aiName}）`,
       color: 15339532,
+      description: `**${aiName}のツッコミ:**\n${currentLog.ai_comment}`,
       fields: [
-        { name: "📱 X用（短文）", value: shortVal || "なし" },
-        { name: "📝 詳細アーカイブ（長文）", value: longVal || "なし" }
+        { name: "📱 Xポスト内容", value: editedPost }
       ],
-      footer: { text: `画像 ${imagesData.length} 枚を解析 | ${new Date().toLocaleString()}` }
+      footer: { text: `User ID: ${userId} | ${new Date().toLocaleString()}` }
     }]
   };
 
   const formData = new FormData();
   formData.append("payload_json", JSON.stringify(payload));
 
-  for (let i = 0; i < imagesData.length; i++) {
-    const byteCharacters = atob(imagesData[i].base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let j = 0; j < byteCharacters.length; j++) {
-      byteNumbers[j] = byteCharacters.charCodeAt(j);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: imagesData[i].mimeType });
-    formData.append(`files[${i}]`, blob, `photo_${i + 1}.jpg`);
-  }
+  imagesData.forEach((img, i) => {
+    const byteChars = atob(img.base64);
+    const byteNums = new Array(byteChars.length);
+    for (let j = 0; j < byteChars.length; j++) byteNums[j] = byteChars.charCodeAt(j);
+    const blob = new Blob([new Uint8Array(byteNums)], { type: img.mimeType });
+    formData.append(`files[${i}]`, blob, `meal_${i + 1}.jpg`);
+  });
 
-  try {
-    const res = await fetch(`${RELAY_SERVER_URL}/api/discord`, {
-      method: "POST",
-      body: formData
-    });
-    if (!res.ok) throw new Error("Discord送信エラー");
-    alert("写真とテキストをDiscordに保存しました！（直した文体もAIが学習しました）");
-  } catch (e) {
-    alert("Discord送信に失敗しました。");
-    console.error(e);
-  } finally {
-    btn.disabled = false;
-    btn.innerText = "💬 Discordへ保存";
-  }
+  await fetch(`${RELAY_SERVER_URL}/api/discord`, { method: "POST", body: formData });
+  alert("D1データベースとDiscordに保存完了しました！");
 }
