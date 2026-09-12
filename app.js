@@ -101,7 +101,7 @@ function compressImage(file) {
     reader.readAsDataURL(file);
   });
 }
-  // サムネイル作成関数
+
 function createTinyThumb(dataUrl) {
   return new Promise((resolve) => {
     const img = new Image();
