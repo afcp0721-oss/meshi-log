@@ -384,11 +384,13 @@ async function loadMealHistory() {
       } catch (e) {}
 
       if (photos.length > 0) {
+        // 写真リスト全体を渡す
+        const photosJson = JSON.stringify(photos).replace(/"/g, '&quot;');
         photosHtml = `<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px;">` +
-          photos.map(p => `<img src="${p}" onclick="openImageModal('${p}')" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer;">`).join('') +
+          photos.map((p, idx) => `<img src="${p}" onclick="openGallery(${photosJson}, ${idx})" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer;">`).join('') +
           `</div>`;
       } else if (item.photo_thumb) {
-        photosHtml = `<img src="${item.photo_thumb}" onclick="openImageModal('${item.photo_thumb}')" style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; margin-bottom: 8px; cursor: pointer;">`;
+        photosHtml = `<img src="${item.photo_thumb}" onclick="openGallery(['${item.photo_thumb}'], 0)" style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; margin-bottom: 8px; cursor: pointer;">`;
       }
 
       card.innerHTML = `
@@ -430,19 +432,78 @@ async function handleGoogleLogin(response) {
     alert("通信エラーが発生しました: " + e.message);
   }
 }
-// 画像拡大モーダル制御
-function openImageModal(src) {
+// ギャラリー・スワイプ制御
+let currentGalleryList = [];
+let currentGalleryIndex = 0;
+let touchStartX = 0;
+let touchEndX = 0;
+
+function openGallery(photoList, startIndex = 0) {
+  currentGalleryList = photoList;
+  currentGalleryIndex = startIndex;
+  updateGalleryView();
   const modal = document.getElementById('imageModal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function updateGalleryView() {
   const modalImg = document.getElementById('imageModalImg');
-  if (modal && modalImg) {
-    modalImg.src = src;
-    modal.style.display = 'flex';
+  const counter = document.getElementById('modalCounter');
+  const prevBtn = document.getElementById('modalPrevBtn');
+  const nextBtn = document.getElementById('modalNextBtn');
+
+  if (modalImg && currentGalleryList.length > 0) {
+    modalImg.src = currentGalleryList[currentGalleryIndex];
+  }
+  if (counter) {
+    counter.innerText = `${currentGalleryIndex + 1} / ${currentGalleryList.length}`;
+    counter.style.display = currentGalleryList.length > 1 ? 'block' : 'none';
+  }
+  if (prevBtn) prevBtn.style.display = currentGalleryIndex > 0 ? 'flex' : 'none';
+  if (nextBtn) nextBtn.style.display = currentGalleryIndex < currentGalleryList.length - 1 ? 'flex' : 'none';
+}
+
+function showPrevImage() {
+  if (currentGalleryIndex > 0) {
+    currentGalleryIndex--;
+    updateGalleryView();
   }
 }
 
-function closeImageModal() {
+function showNextImage() {
+  if (currentGalleryIndex < currentGalleryList.length - 1) {
+    currentGalleryIndex++;
+    updateGalleryView();
+  }
+}
+
+function closeImageModal(e) {
+  if (e && e.target.id !== 'imageModal' && !e.target.innerText.includes('✕')) return;
   const modal = document.getElementById('imageModal');
-  if (modal) {
-    modal.style.display = 'none';
+  if (modal) modal.style.display = 'none';
+}
+
+// タッチスワイプ検知
+document.addEventListener('DOMContentLoaded', () => {
+  const modal = document.getElementById('imageModal');
+  if (!modal) return;
+
+  modal.addEventListener('touchstart', (e) => {
+    touchStartX = e.changedTouches[0].screenX;
+  }, { passive: true });
+
+  modal.addEventListener('touchend', (e) => {
+    touchEndX = e.changedTouches[0].screenX;
+    handleSwipeGesture();
+  }, { passive: true });
+});
+
+function handleSwipeGesture() {
+  const swipeThreshold = 40; // スワイプと判定する移動距離(px)
+  const diff = touchEndX - touchStartX;
+  if (diff < -swipeThreshold) {
+    showNextImage(); // 左スワイプで次の写真
+  } else if (diff > swipeThreshold) {
+    showPrevImage(); // 右スワイプで前の写真
   }
 }
