@@ -1,7 +1,7 @@
 const RELAY_SERVER_URL = "https://icy-silence-6539.afcp0721.workers.dev";
 
 let userId = localStorage.getItem('meshi_user_id');
-let aiName = localStorage.getItem('meshi_ai_name') || 'ララ';
+let aiName = localStorage.getItem('meshi_ai_name') || '相棒';
 let userCall = localStorage.getItem('meshi_user_call') || 'ボス';
 let imagesData = [];
 let currentLog = null;
@@ -19,14 +19,18 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+function setAiName(name) {
+  document.getElementById('aiNameInput').value = name;
+}
+
 function setCall(call) {
   document.getElementById('userCallInput').value = call;
 }
 
 async function saveRelationship() {
-  aiName = document.getElementById('aiNameInput').value.trim() || 'ララ';
+  aiName = document.getElementById('aiNameInput').value.trim() || '相棒';
   userCall = document.getElementById('userCallInput').value.trim() || 'ボス';
-
+  
   localStorage.setItem('meshi_ai_name', aiName);
   localStorage.setItem('meshi_user_call', userCall);
 
