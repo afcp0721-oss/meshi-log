@@ -385,10 +385,10 @@ async function loadMealHistory() {
 
       if (photos.length > 0) {
         photosHtml = `<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px;">` +
-          photos.map(p => `<img src="${p}" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px;">`).join('') +
+          photos.map(p => `<img src="${p}" onclick="openImageModal('${p}')" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer;">`).join('') +
           `</div>`;
       } else if (item.photo_thumb) {
-        photosHtml = `<img src="${item.photo_thumb}" style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; margin-bottom: 8px;">`;
+        photosHtml = `<img src="${item.photo_thumb}" onclick="openImageModal('${item.photo_thumb}')" style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; margin-bottom: 8px; cursor: pointer;">`;
       }
 
       card.innerHTML = `
@@ -428,5 +428,21 @@ async function handleGoogleLogin(response) {
     }
   } catch (e) {
     alert("通信エラーが発生しました: " + e.message);
+  }
+}
+// 画像拡大モーダル制御
+function openImageModal(src) {
+  const modal = document.getElementById('imageModal');
+  const modalImg = document.getElementById('imageModalImg');
+  if (modal && modalImg) {
+    modalImg.src = src;
+    modal.style.display = 'flex';
+  }
+}
+
+function closeImageModal() {
+  const modal = document.getElementById('imageModal');
+  if (modal) {
+    modal.style.display = 'none';
   }
 }
