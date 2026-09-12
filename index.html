@@ -100,8 +100,6 @@
 
     <div id="aiVoiceBubble" class="bubble"></div>
 
-    <div id="aiVoiceBubble" class="bubble"></div>
-
     <!-- 気分選択チップ -->
     <label>今日の気分（任意）</label>
     <div class="chip-wrap" id="moodChips">
@@ -119,7 +117,7 @@
       <span class="chip" onclick="selectLength(this, 'long')">長文（200字詳細）</span>
     </div>
 
-    <input type="file" id="fileInput" accept="image/*" multiple style="display: none;" onchange="handleImages(event)">
+   <input type="file" id="fileInput" multiple accept="image/*" onchange="handleImages(event)">
     <button class="btn-main" onclick="document.getElementById('fileInput').click()">📷 写真を撮る / 選ぶ（最大6枚）</button>
 
     <div id="previewGrid" class="grid"></div>
