@@ -377,12 +377,22 @@ async function loadMealHistory() {
       const card = document.createElement('div');
       card.style.cssText = "background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px;";
       
-      const imgHtml = item.photo_thumb 
-        ? `<img src="${item.photo_thumb}" style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; margin-bottom: 8px;">`
-        : '';
+      let photosHtml = '';
+      let photos = [];
+      try {
+        if (item.all_photos) photos = JSON.parse(item.all_photos);
+      } catch (e) {}
+
+      if (photos.length > 0) {
+        photosHtml = `<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px;">` +
+          photos.map(p => `<img src="${p}" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px;">`).join('') +
+          `</div>`;
+      } else if (item.photo_thumb) {
+        photosHtml = `<img src="${item.photo_thumb}" style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; margin-bottom: 8px;">`;
+      }
 
       card.innerHTML = `
-        ${imgHtml}
+        ${photosHtml}
         <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 6px;">${item.created_at}</div>
         <div style="font-size: 0.85rem; color: #6ee7b7; margin-bottom: 8px; font-weight: bold;">💬 ${item.ai_comment}</div>
         <div style="font-size: 0.82rem; color: #e2e8f0; white-space: pre-wrap; background: #1e293b; padding: 8px; border-radius: 6px;">${item.x_post_text}</div>
