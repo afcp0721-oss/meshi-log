@@ -2,89 +2,69 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>メシログ & ライフログ AI</title>
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>メシログ AI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: #0f172a; color: #f8fafc; padding: 16px; display: flex; justify-content: center; }
+    .app-container { width: 100%; max-width: 480px; }
+    .card { background: #1e293b; border-radius: 14px; padding: 18px; border: 1px solid #334155; margin-bottom: 16px; }
+    .title { font-size: 1.25rem; font-weight: 800; color: #f97316; margin-bottom: 6px; }
+    .desc { font-size: 0.85rem; color: #94a3b8; margin-bottom: 16px; }
+    label { font-size: 0.8rem; font-weight: 700; color: #cbd5e1; display: block; margin-bottom: 6px; }
+    input[type="text"] { width: 100%; background: #0f172a; border: 1px solid #475569; color: #fff; padding: 12px; border-radius: 8px; font-size: 0.95rem; margin-bottom: 12px; }
+    .chip-wrap { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .chip { background: #334155; color: #e2e8f0; font-size: 0.8rem; padding: 6px 12px; border-radius: 16px; cursor: pointer; border: 1px solid transparent; }
+    .chip:active { background: #ea580c; }
+    .btn-main { width: 100%; background: #ea580c; color: #fff; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: 700; cursor: pointer; }
+    .btn-main:disabled { background: #475569; opacity: 0.5; }
+    .btn-x { background: #000; color: #fff; border: 1px solid #334155; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.9rem; margin-top: 10px; }
+    .bubble { background: #064e3b; border: 1px solid #059669; border-radius: 10px; padding: 12px; font-size: 0.88rem; color: #6ee7b7; line-height: 1.4; margin-bottom: 16px; }
+    .alert-box { background: #7f1d1d; border: 1px solid #dc2626; color: #fca5a5; padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px; display: none; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+    .preview-thumb { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: 8px; border: 1px solid #475569; }
+  </style>
 </head>
 <body>
 
-<div class="app-card">
-  <h1>メシログ & ライフログ</h1>
-  <div class="sub">写真を選ぶだけでAIが自動判別して投稿作成</div>
+<div class="app-container">
+  <div id="onboardingCard" class="card" style="display: none;">
+    <div class="title">🤝 相棒を決めよう</div>
+    <div class="desc">これからあなたの食事と生活を記録する専属AIの呼び名と、あなたの呼ばれ方を設定します。</div>
 
-  <!-- AIからの声がけ・気づき枠 -->
-  <div id="aiVoiceBox" class="ai-voice-box">
-    <div class="ai-voice-header">
-      <span class="ai-avatar">🤖</span>
-      <span class="ai-name">AIアシスタントのひとこと</span>
+    <label>AIの名前</label>
+    <input type="text" id="aiNameInput" placeholder="例：ララ, 相棒" value="ララ">
+
+    <label>あなたの呼ばれ方</label>
+    <input type="text" id="userCallInput" placeholder="例：ボス, 大将" value="ボス">
+
+    <div class="chip-wrap">
+      <span class="chip" onclick="setCall('ボス')">ボス</span>
+      <span class="chip" onclick="setCall('大将')">大将</span>
+      <span class="chip" onclick="setCall('アニキ')">アニキ</span>
+      <span class="chip" onclick="setCall('神様')">神様</span>
     </div>
-    <div id="aiVoiceText" class="ai-voice-text">ようこそ！写真をセットすると好みを分析します。</div>
+
+    <button class="btn-main" onclick="saveRelationship()">この設定でスタート！</button>
   </div>
 
-  <div class="step-title"><span class="badge">1</span> 写真を選ぶ（最大6枚・複数選択可）</div>
-  <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
-    <span id="uploadText">📷 タップして写真を選択（最大6枚）</span>
-    <input type="file" id="fileInput" accept="image/*" multiple onchange="handleMultipleImages(event)">
-    <div id="previewGrid" class="preview-grid"></div>
-  </div>
+  <div id="mainCard" class="card" style="display: none;">
+    <div id="aiVoiceBubble" class="bubble"></div>
 
-  <div class="step-title"><span class="badge">2</span> 気分 ＆ 文体スタイル</div>
-  <div class="tag-container" id="tagList">
-    <button class="tag-btn active" onclick="selectTag(this)">🔥 最高！</button>
-    <button class="tag-btn" onclick="selectTag(this)">😋 うまい</button>
-    <button class="tag-btn" onclick="selectTag(this)">☕ まったり</button>
-    <button class="tag-btn" onclick="selectTag(this)">✨ 絶景・爽快</button>
-    <button class="tag-btn" onclick="selectTag(this)">👍 リピ確定</button>
-  </div>
+    <input type="file" id="fileInput" accept="image/*" multiple style="display: none;" onchange="handleImages(event)">
+    <button class="btn-main" onclick="document.getElementById('fileInput').click()">📷 写真を撮る / 選ぶ</button>
 
-  <div class="style-row">
-    <button class="style-btn" data-style="natural" onclick="selectStyle(this)">🌿 スマート</button>
-    <button class="style-btn" data-style="dandy" onclick="selectStyle(this)">🕶️ ダンディ</button>
-    <button class="style-btn" data-style="lady" onclick="selectStyle(this)">🌸 軽やかレディ</button>
-  </div>
+    <div id="previewGrid" class="grid"></div>
+    <div id="safetyAlert" class="alert-box"></div>
 
-  <div class="step-title"><span class="badge">3</span> AIで同時生成</div>
-  <button id="generateBtn" class="btn-main" onclick="generatePosts()" disabled>AIでコメントを作成する</button>
+    <div id="resultSection" style="display: none; margin-top: 16px;">
+      <label>📱 X用ポスト（微修正するとAIが学習）</label>
+      <textarea id="xPostText" rows="4" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #fff; padding: 10px; border-radius: 8px; font-size: 0.9rem; margin-bottom: 10px;"></textarea>
 
-  <div class="learn-badge-row">
-    <span id="learnStatus" class="learn-status">🧠 文体学習: 0件（修正保存であなた専用に成長）</span>
-    <button id="resetLearnBtn" class="btn-reset-learn" onclick="resetLearnedStyle()" style="display: none;">学習リセット</button>
-  </div>
-
-  <div id="spinnerWrap" class="spinner-wrap">
-    <div class="spinner"></div>
-    <div id="loadingText" class="loading-text">最大6枚を圧縮・解析中...</div>
-  </div>
-
-  <div id="resultSection" class="result-section">
-    <span id="detectedMode" class="detected-mode">🏷️ 自動判別中</span>
-
-    <div class="box-title">
-      <span>📱 X用（短文・130字以内）</span>
-      <span class="edit-hint">※直して保存するとAIが好みを学習します</span>
-    </div>
-    <textarea id="shortText" class="output-box" rows="4"></textarea>
-
-    <div class="box-title">
-      <span>📝 詳細アーカイブ用（制限なし長文）</span>
-    </div>
-    <textarea id="longText" class="output-box" rows="7"></textarea>
-
-    <div class="action-row">
-      <button class="btn-sub btn-copy" onclick="copyBoth()">📋 コピーする</button>
-      <button id="discordBtn" class="btn-sub btn-discord" onclick="sendToDiscord()">💬 Discordへ保存</button>
+      <a id="xShareBtn" class="btn-x" href="#" target="_blank">𝕏 でポストする</a>
+      <button class="btn-main" style="background: #2563eb; margin-top: 8px;" onclick="saveToCloudAndDiscord()">💾 Discord & クラウドに記録</button>
     </div>
   </div>
-
-  <!-- 過去ログ閲覧エリア -->
-  <details class="history-section" id="historyDetails">
-    <summary class="history-summary">
-      <span>📂 スマホ内の過去ログ履歴</span>
-      <span id="historyCountBadge" style="font-size: 0.75rem; color: #ea580c;">0件</span>
-    </summary>
-    <div class="history-list" id="historyList"></div>
-    <button class="btn-mini-clear" onclick="clearHistory()">履歴をすべてクリア</button>
-  </details>
 </div>
 
 <script src="app.js"></script>
