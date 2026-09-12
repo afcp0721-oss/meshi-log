@@ -101,7 +101,24 @@ function compressImage(file) {
     reader.readAsDataURL(file);
   });
 }
-
+  // サムネイル作成関数
+function createTinyThumb(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const maxDim = 240;
+      let w = img.width, h = img.height;
+      if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+      else { w = Math.round((w * maxDim) / h); h = maxDim; }
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.6));
+    };
+    img.src = dataUrl;
+  });
+}
 async function handleImages(event) {
   const files = Array.from(event.target.files).slice(0, 6);
   if (!files.length) return;
@@ -271,7 +288,9 @@ async function saveToCloudAndDiscord() {
     const editedPost = document.getElementById('xPostText').value;
     const mealId = 'meal_' + Date.now();
     const bestIdx = currentLog.best_image_idx || 0;
-    const photoThumb = imagesData[bestIdx] ? imagesData[bestIdx].dataUrl : (imagesData[0] ? imagesData[0].dataUrl : null);
+    const targetImg = imagesData[bestIdx] || imagesData[0];
+    const photoThumb = targetImg ? await createTinyThumb(targetImg.dataUrl) : null;
+    const allPhotos = imagesData.map(img => img.dataUrl);
 
     await fetch(`${RELAY_SERVER_URL}/api/save-log`, {
       method: "POST",
@@ -282,7 +301,8 @@ async function saveToCloudAndDiscord() {
         aiComment: currentLog.ai_comment,
         xPostText: editedPost,
         bestIdx: bestIdx,
-        photoThumb: photoThumb
+        photoThumb: photoThumb,
+        allPhotos: allPhotos
       })
     });
 
