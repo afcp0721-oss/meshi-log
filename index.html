@@ -43,6 +43,9 @@
       to { transform: rotate(360deg); }
     }
   </style>
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer>
+  </script>
 </head>
 <body>
 
@@ -71,6 +74,15 @@
     </div>
 
    <button class="btn-main" onclick="saveRelationship()">設定を保存する</button>
+    <hr style="border: 0; border-top: 1px solid #334155; margin: 16px 0;">
+      <label>Googleアカウント連携（機種変・バックアップ用）</label>
+      <div id="g_id_onload"
+           data-client_id="205404926022-klv61q0j87hs3hkb9f6ijncbr7jnqukf.apps.googleusercontent.com"
+           data-callback="handleGoogleLogin"
+           data-auto_prompt="false">
+      </div>
+      <div class="g_id_signin" data-type="standard" data-shape="rectangular" data-theme="outline" data-text="signin_with" data-size="large" data-logo_alignment="left"></div>
+      <div id="googleAuthStatus" style="font-size: 0.8rem; color: #94a3b8; margin-top: 8px;">未連携</div>
     <button class="btn-sub" onclick="skipSettings()">閉じる</button>
   </div>
 
@@ -88,7 +100,7 @@
 <!-- メイン操作画面 -->
   <div id="mainCard" class="card">
     <div style="margin-bottom: 12px;">
-      <div class="title" style="margin-bottom: 8px; font-size: 1.25rem;">🍽️ めしログ＆ライフログ</div>
+      <div class="title" style="margin-bottom: 8px; font-size: 1.15rem; white-space: nowrap;">🍽️ めしログ＆ライフログ</div>
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <span id="headerAiTitle" style="font-size: 0.85rem; font-weight: bold; color: #94a3b8;">専属AI: 相棒</span>
         <div style="display: flex; gap: 6px;">
