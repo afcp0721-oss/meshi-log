@@ -408,3 +408,25 @@ function closeHistory() {
   document.getElementById('historyModal').style.display = 'none';
   document.getElementById('mainCard').style.display = 'block';
 }
+// Googleログインコールバック
+async function handleGoogleLogin(response) {
+  try {
+    const res = await fetch(`${RELAY_SERVER_URL}/api/auth/google`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credential: response.credential, currentUserId: getUserId() })
+    });
+    const data = await res.json();
+    if (data.success && data.userId) {
+      localStorage.setItem("meshi_user_id", data.userId);
+      const statusEl = document.getElementById("googleAuthStatus");
+      if (statusEl) statusEl.innerText = `✅ 連携中: ${data.email}`;
+      alert(`Googleアカウント（${data.email}）と連携・同期しました！`);
+      location.reload();
+    } else {
+      alert("ログインに失敗しました: " + (data.error || ""));
+    }
+  } catch (e) {
+    alert("通信エラーが発生しました: " + e.message);
+  }
+}
