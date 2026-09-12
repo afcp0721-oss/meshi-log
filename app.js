@@ -311,3 +311,41 @@ function resetAll() {
   document.getElementById('fileInput').value = '';
   greet();
 }
+// D1から過去ログを取得して表示
+async function loadMealHistory() {
+  const modal = document.getElementById('historyModal');
+  const list = document.getElementById('historyList');
+  modal.style.display = 'block';
+  document.getElementById('mainCard').style.display = 'none';
+
+  list.innerHTML = '<div style="color: #94a3b8; font-size: 0.85rem; text-align: center;">読み込み中…</div>';
+
+  try {
+    const res = await fetch(`${RELAY_SERVER_URL}/api/logs?userId=${userId}`);
+    const data = await res.json();
+
+    if (!data.results || data.results.length === 0) {
+      list.innerHTML = '<div style="color: #94a3b8; font-size: 0.85rem; text-align: center;">まだ記録がありません。</div>';
+      return;
+    }
+
+    list.innerHTML = '';
+    data.results.forEach(item => {
+      const card = document.createElement('div');
+      card.style.cssText = "background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px;";
+      card.innerHTML = `
+        <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 6px;">${item.created_at}</div>
+        <div style="font-size: 0.85rem; color: #6ee7b7; margin-bottom: 8px; font-weight: bold;">💬 ${item.ai_comment}</div>
+        <div style="font-size: 0.82rem; color: #e2e8f0; white-space: pre-wrap; background: #1e293b; padding: 8px; border-radius: 6px;">${item.x_post_text}</div>
+      `;
+      list.appendChild(card);
+    });
+  } catch (err) {
+    list.innerHTML = '<div style="color: #f87171; font-size: 0.85rem; text-align: center;">ログの取得に失敗しました。</div>';
+  }
+}
+
+function closeHistory() {
+  document.getElementById('historyModal').style.display = 'none';
+  document.getElementById('mainCard').style.display = 'block';
+}
