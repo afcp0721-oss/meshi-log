@@ -13,18 +13,18 @@ window.addEventListener('DOMContentLoaded', () => {
     userId = 'usr_' + Math.random().toString(36).substring(2, 10);
     localStorage.setItem('meshi_user_id', userId);
   }
-
   updateHeader();
   greet();
 });
 
 function updateHeader() {
-  document.getElementById('headerAiTitle').innerText = `専属AI: ${aiName}（呼び名: ${userCall}）`;
+  const headerEl = document.getElementById('headerAiTitle');
+  if (headerEl) headerEl.innerText = `専属AI: ${aiName}`;
 }
 
 function greet() {
   const voiceEl = document.getElementById('aiVoiceBubble');
-  voiceEl.innerText = `${userCall}、お腹空いた！今日のウマい飯、${aiName}に見せて？（最大6枚まで選べるよ）`;
+  if (voiceEl) voiceEl.innerText = `${userCall}、今日のウマい飯、${aiName}に見せて？`;
 }
 
 function setAiName(name) { document.getElementById('aiNameInput').value = name; }
@@ -60,16 +60,24 @@ async function saveRelationship() {
   }).catch(() => {});
 }
 
+// 気分ボタン選択
 function selectMood(el, mood) {
   document.querySelectorAll('#moodChips .chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
   selectedMood = mood;
 }
 
+// 長さ切り替え（短文 / 長文）
 function selectLength(el, len) {
   document.querySelectorAll('#lengthChips .chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
   selectedLength = len;
+  
+  // すでに解析結果が出ている場合、ボタンを押したら再フォーマット
+  if (currentLog) {
+    document.getElementById('xPostText').value = len === 'short' ? currentLog.x_post_short : currentLog.x_post_long;
+    updateXLink(document.getElementById('xPostText').value);
+  }
 }
 
 function compressImage(file) {
@@ -132,7 +140,9 @@ function renderPreviews() {
   });
 
   const analyzeBtn = document.getElementById('btnAnalyze');
-  analyzeBtn.style.display = imagesData.length > 0 ? 'block' : 'none';
+  if (analyzeBtn) {
+    analyzeBtn.style.display = imagesData.length > 0 ? 'block' : 'none';
+  }
 }
 
 function removeImage(index) {
@@ -151,31 +161,25 @@ async function analyzeImages() {
   const resultSec = document.getElementById('resultSection');
   const shareBtn = document.getElementById('xShareBtn');
 
-  voiceEl.innerText = `解析中… ${aiName}が写真${imagesData.length}枚をじっくり見てるから待っててね！`;
+  voiceEl.innerText = `解析中… ${aiName}が写真${imagesData.length}枚をチェック中！`;
   alertEl.style.display = 'none';
   resultSec.style.display = 'none';
-
-  const lenInstruction = selectedLength === 'short' 
-    ? 'X用ポスト文は80〜100文字程度で簡潔に。'
-    : 'X用ポスト文は180〜220文字程度で料理のディテールや味の情景をしっかり描写して。';
 
   const prompt = `
 あなたは${userCall}の専属AI「${aiName}」です。32歳くらいのしっかり者で、ストレートかつユーモアを交えて話します。
 今日の${userCall}の気分は「${selectedMood}」です。
 渡された食事写真（${imagesData.length}枚）を解析し、純粋なJSONのみを出力してください。
 
-【文字量指定】
-${lenInstruction}
-
-【最重要・機密情報セキュリティ判定】
-写真内に料理以外の個人情報（レシート・領収書・クレジットカード・機密書類・免許証・他人の顔の明確な写り込みなど）が存在するか厳重にチェックしてください。
+【最重要・セキュリティ判定】
+写真内に料理以外の個人情報（レシート・クレジットカード・書類・免許証・顔の明確な写り込みなど）があるか判定してください。
 
 【出力JSONフォーマット】
 {
   "has_sensitive_data": true または false,
   "safety_warning": "機密情報や顔がある場合の警告文。問題なければ空文字",
   "ai_comment": "${aiName}としてのツッコミ・感想（${userCall}と呼びかけること）",
-  "x_post_text": "X用ポスト文（ハッシュタグと絵文字含む。本人が投稿する自然な口調）",
+  "x_post_short": "X用ポスト文（80〜100字程度、ハッシュタグと絵文字含む）",
+  "x_post_long": "X用ポスト文（180〜220字程度で詳細、ハッシュタグと絵文字含む）",
   "best_image_idx": 0
 }
 `;
@@ -199,7 +203,10 @@ ${lenInstruction}
 
     currentLog = result;
     voiceEl.innerText = result.ai_comment;
-    document.getElementById('xPostText').value = result.x_post_text;
+
+    // 選択中の長さに応じて初期セット
+    const postContent = selectedLength === 'short' ? result.x_post_short : result.x_post_long;
+    document.getElementById('xPostText').value = postContent;
 
     if (result.has_sensitive_data) {
       alertEl.innerText = `⚠️ 警告: ${result.safety_warning}\n個人情報保護のため、X共有ボタンを無効化しています。`;
@@ -209,7 +216,7 @@ ${lenInstruction}
     } else {
       shareBtn.style.pointerEvents = 'auto';
       shareBtn.style.opacity = '1';
-      updateXLink(result.x_post_text);
+      updateXLink(postContent);
     }
 
     resultSec.style.display = 'block';
@@ -271,7 +278,6 @@ async function saveToCloudAndDiscord() {
 
   await fetch(`${RELAY_SERVER_URL}/api/discord`, { method: "POST", body: formData });
 
-  // 3. 完了通知 ＆ 完全リセット
   alert("D1データベースとDiscordに保存完了しました！");
   resetAll();
 }
