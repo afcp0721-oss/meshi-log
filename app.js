@@ -159,10 +159,12 @@ async function analyzeImages() {
   const shareBtn = document.getElementById('xShareBtn');
   const analyzeBtn = document.getElementById('btnAnalyze');
 
+  // スピナー付きローディング表示 ＆ 連打防止
   if (analyzeBtn) {
     analyzeBtn.disabled = true;
-    analyzeBtn.innerHTML = '⏳ 解析中…（相棒がじっくり確認中）';
-    analyzeBtn.style.opacity = '0.6';
+    analyzeBtn.innerHTML = '<span class="spinner"></span>解析中…（相棒が確認中）';
+    analyzeBtn.style.opacity = '0.7';
+    analyzeBtn.style.cursor = 'not-allowed';
   }
 
   voiceEl.innerText = `解析中… ${aiName}が写真${imagesData.length}枚をチェック中！`;
@@ -224,19 +226,23 @@ async function analyzeImages() {
 
     resultSec.style.display = 'block';
 
+    // 完了時：ボタンを復元
     if (analyzeBtn) {
       analyzeBtn.disabled = false;
       analyzeBtn.innerHTML = '🔍 この写真で解析する';
       analyzeBtn.style.opacity = '1';
+      analyzeBtn.style.cursor = 'pointer';
     }
   } catch (err) {
     voiceEl.innerText = "うーん、解析でエラーが出ちゃった！もう一度試してみて。";
     console.error(err);
 
+    // エラー時：ボタンを復元
     if (analyzeBtn) {
       analyzeBtn.disabled = false;
       analyzeBtn.innerHTML = '🔍 この写真で解析する';
       analyzeBtn.style.opacity = '1';
+      analyzeBtn.style.cursor = 'pointer';
     }
   }
 }
