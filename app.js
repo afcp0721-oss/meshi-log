@@ -259,47 +259,69 @@ document.getElementById('xPostText').addEventListener('input', (e) => {
 async function saveToCloudAndDiscord() {
   if (!currentLog) return;
 
-  const bestIdx = currentLog.best_image_idx || 0;
-  const photoThumb = imagesData[bestIdx] ? imagesData[bestIdx].dataUrl : (imagesData[0] ? imagesData[0].dataUrl : null);
+  const saveBtn = document.getElementById('btnSaveCloud');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="spinner"></span>保存中…';
+    saveBtn.style.opacity = '0.7';
+    saveBtn.style.cursor = 'not-allowed';
+  }
 
-  await fetch(`${RELAY_SERVER_URL}/api/save-log`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      userId,
-      mealId,
-      aiComment: currentLog.ai_comment,
-      xPostText: editedPost,
-      bestIdx: bestIdx,
-      photoThumb: photoThumb
-    })
-  });
+  try {
+    const editedPost = document.getElementById('xPostText').value;
+    const mealId = 'meal_' + Date.now();
+    const bestIdx = currentLog.best_image_idx || 0;
+    const photoThumb = imagesData[bestIdx] ? imagesData[bestIdx].dataUrl : (imagesData[0] ? imagesData[0].dataUrl : null);
 
-  const payload = {
-    embeds: [{
-      title: `🍽️ ${userCall}のメシログ（AI: ${aiName}）`,
-      color: 15339532,
-      description: `**気分:** ${selectedMood}\n**${aiName}のツッコミ:**\n${currentLog.ai_comment}`,
-      fields: [{ name: "📱 Xポスト内容", value: editedPost }],
-      footer: { text: `User ID: ${userId} | ${new Date().toLocaleString()}` }
-    }]
-  };
+    await fetch(`${RELAY_SERVER_URL}/api/save-log`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        mealId,
+        aiComment: currentLog.ai_comment,
+        xPostText: editedPost,
+        bestIdx: bestIdx,
+        photoThumb: photoThumb
+      })
+    });
 
-  const formData = new FormData();
-  formData.append("payload_json", JSON.stringify(payload));
+    const payload = {
+      embeds: [{
+        title: `🍽️ ${userCall}のメシログ（AI: ${aiName}）`,
+        color: 15339532,
+        description: `**気分:** ${selectedMood}\n**${aiName}のツッコミ:**\n${currentLog.ai_comment}`,
+        fields: [{ name: "📱 Xポスト内容", value: editedPost }],
+        footer: { text: `User ID: ${userId} | ${new Date().toLocaleString()}` }
+      }]
+    };
 
-  imagesData.forEach((img, i) => {
-    const byteChars = atob(img.base64);
-    const byteNums = new Array(byteChars.length);
-    for (let j = 0; j < byteChars.length; j++) byteNums[j] = byteChars.charCodeAt(j);
-    const blob = new Blob([new Uint8Array(byteNums)], { type: img.mimeType });
-    formData.append(`files[${i}]`, blob, `meal_${i + 1}.jpg`);
-  });
+    const formData = new FormData();
+    formData.append("payload_json", JSON.stringify(payload));
 
-  await fetch(`${RELAY_SERVER_URL}/api/discord`, { method: "POST", body: formData });
+    imagesData.forEach((img, i) => {
+      const byteChars = atob(img.base64);
+      const byteNums = new Array(byteChars.length);
+      for (let j = 0; j < byteChars.length; j++) byteNums[j] = byteChars.charCodeAt(j);
+      const blob = new Blob([new Uint8Array(byteNums)], { type: img.mimeType });
+      formData.append(`files[${i}]`, blob, `meal_${i + 1}.jpg`);
+    });
 
-  alert("D1データベースとDiscordに保存完了しました！");
-  resetAll();
+    await fetch(`${RELAY_SERVER_URL}/api/discord`, { method: "POST", body: formData });
+
+    alert("D1データベースとDiscordに保存完了しました！");
+    resetAll();
+  } catch (err) {
+    alert("保存中にエラーが発生しました。もう一度試してください。");
+    console.error(err);
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = '💾 クラウド＆Discordに記録してリセット';
+      saveBtn.style.opacity = '1';
+      saveBtn.style.cursor = 'pointer';
+    }
+  }
 }
 
 function resetAll() {
