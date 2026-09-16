@@ -48,6 +48,20 @@
     #modalImg { max-width: 92%; max-height: 80%; object-fit: contain; border-radius: 8px; }
     .modal-arrow { position: absolute; top: 50%; transform: translateY(-50%); font-size: 2rem; color: #fff; background: rgba(0,0,0,0.5); border: none; padding: 10px; cursor: pointer; border-radius: 50%; }
     .modal-close { position: absolute; top: 20px; right: 20px; font-size: 1.8rem; color: #fff; cursor: pointer; }
+ /* ローディングスピナー */
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
   </style>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -67,7 +81,6 @@
         <span class="chip" onclick="setCall('マスター')">マスター</span>
         <span class="chip" onclick="setCall('大将')">大将</span>
       </div>
-
       <label>AIの名前</label>
       <input type="text" id="aiNameInput" placeholder="例：ログアシスタント, 相棒" value="ログアシスタント">
       <div class="chip-wrap">
@@ -149,12 +162,15 @@
         </div>
       </div>
 
-      <!-- 【おまかせモード用】1秒保存ボタン -->
+    <!-- 【おまかせモード用】1秒保存ボタン -->
       <div id="basicActionArea">
-        <button id="btnQuickUpload" class="btn-main" onclick="uploadQuick()" disabled>⚡ 預ける（1秒で完了）</button>
+        <button id="btnQuickUpload" class="btn-main" onclick="uploadQuick()" disabled>
+  <span id="spinBasic" class="spinner" style="display: none;"></span>
+  <span id="textBasic">⚡ 預ける（1秒で完了）</span>
+</button>
       </div>
 
-      <!-- 【こだわりPROモード用】カスタム生成エリア -->
+     <!-- 【こだわりPROモード用】カスタム生成エリア -->
       <div id="proActionArea" style="display: none;">
         <label>文体・トーン</label>
         <div class="chip-wrap" id="toneChips">
@@ -173,7 +189,10 @@
           <span class="chip" id="dynamicPhraseChip" onclick="toggleMood(this, '')">リピ確定！</span>
         </div>
 
-        <button id="btnProGenerate" class="btn-main" onclick="generatePro()" disabled>✨ じっくり生成してプレビュー</button>
+        <button id="btnProGenerate" class="btn-main" onclick="generatePro()" disabled>
+          <span id="spinPro" class="spinner" style="display: none;"></span>
+          <span id="textPro">✨ じっくり生成してプレビュー</span>
+        </button>
       </div>
 
       <!-- 解析結果・Xシェア表示枠 -->
