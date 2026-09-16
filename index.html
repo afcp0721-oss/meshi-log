@@ -118,13 +118,13 @@
         <span class="chip" onclick="setAiName('バディ')">バディ</span>
       </div>
 
-      <label>お決まりフレーズ（口癖）</label>
-      <input type="text" id="myPhraseInput" placeholder="例：リピ確定！, 優勝！" value="リピ確定！">
-      <div class="chip-wrap">
-        <span class="chip" onclick="setPhrase('リピ確定！')">リピ確定！</span>
-        <span class="chip" onclick="setPhrase('優勝！')">優勝！</span>
-        <span class="chip" onclick="setPhrase('今日も今日とて')">今日も今日とて</span>
-      </div>
+      <label>今日の気分追加（マイフレーズ）</label>
+<input type="text" id="myPhraseInput" placeholder="例：最高！, 染みる…, 優勝！" value="リピ確定！">
+<div class="chip-wrap">
+  <span class="chip active" onclick="setPhrase('最高！')">最高！</span>
+  <span class="chip" onclick="setPhrase('染みる…')">染みる…</span>
+  <span class="chip" onclick="setPhrase('優勝！')">優勝！</span>
+</div>
 
       <hr style="border: 0; border-top: 1px solid #334155; margin: 16px 0;">
       <div class="title" style="font-size: 1rem;">🚀 外部連携・バックアップ母艦</div>
@@ -209,7 +209,7 @@
           <span class="chip" onclick="setTone(this, '辛口ツッコミ')">辛口ツッコミ</span>
         </div>
 
-        <label>今日の気分（任意）</label>
+        <label>💡 今日の気分・フレーズ（タップで選択）</label>
         <div class="chip-wrap" id="moodChips">
           <span class="chip" onclick="toggleMood(this, '最高')">😍 最高</span>
           <span class="chip" onclick="toggleMood(this, 'ガッツリ')">💪 ガッツリ</span>
