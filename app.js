@@ -1,221 +1,211 @@
+// --------------------------------------------------
+// 機能0: 設定定数 & ローカルステート管理
+// --------------------------------------------------
 const RELAY_SERVER_URL = "https://icy-silence-6539.afcp0721.workers.dev";
+let userId = localStorage.getItem("meshi_user_id");
+let aiName = localStorage.getItem("meshi_ai_name") || "ログアシスタント";
+let userCall = localStorage.getItem("meshi_user_call") || "ニックネーム";
+let myPhrase = localStorage.getItem("meshi_my_phrase") || "リピ確定！";
+let discordWebhook = localStorage.getItem("meshi_discord_webhook") || "";
+let lineId = localStorage.getItem("meshi_line_id") || "";
 
-let userId = localStorage.getItem('meshi_user_id');
-let aiName = localStorage.getItem('meshi_ai_name') || '相棒';
-let userCall = localStorage.getItem('meshi_user_call') || 'ボス';
-let selectedMood = '最高';
-let selectedLength = 'short';
+let currentMode = "basic"; // basic or pro
 let imagesData = [];
-let currentLog = null;
+let selectedTone = "いつもの相棒";
 
-window.addEventListener('DOMContentLoaded', () => {
+// --------------------------------------------------
+// 機能1: 初期化 & ヘッダー反映
+// --------------------------------------------------
+window.addEventListener("DOMContentLoaded", () => {
   if (!userId) {
-    userId = 'usr_' + Math.random().toString(36).substring(2, 10);
-    localStorage.setItem('meshi_user_id', userId);
+    userId = "usr_" + Math.random().toString(36).substring(2, 10);
+    localStorage.setItem("meshi_user_id", userId);
   }
-  updateHeader();
-  greet();
+  updateUIHeaders();
+  renderGrid();
 });
 
-function updateHeader() {
-  const headerEl = document.getElementById('headerAiTitle');
-  if (headerEl) headerEl.innerText = `専属AI: ${aiName}`;
+function updateUIHeaders() {
+  const headerEl = document.getElementById("headerAiTitle");
+  if (headerEl) headerEl.innerText = `アシスタント: ${aiName}`;
 }
 
-function greet() {
-  const voiceEl = document.getElementById('aiVoiceBubble');
-  if (voiceEl) voiceEl.innerText = `${userCall}、今日のウマい飯、${aiName}に見せて？`;
+// --------------------------------------------------
+// 機能2: モード切替（おまかせ / PRO）
+// --------------------------------------------------
+function switchMode(mode) {
+  currentMode = mode;
+  document.getElementById("btnModeBasic").classList.toggle("active", mode === "basic");
+  document.getElementById("btnModePro").classList.toggle("active", mode === "pro");
+  document.getElementById("basicActionArea").style.display = mode === "basic" ? "block" : "none";
+  document.getElementById("proActionArea").style.display = mode === "pro" ? "block" : "none";
+  document.getElementById("resultArea").style.display = "none";
 }
 
-function setAiName(name) { document.getElementById('aiNameInput').value = name; }
-function setCall(call) { document.getElementById('userCallInput').value = call; }
-
-function openSettings() {
-  document.getElementById('aiNameInput').value = aiName;
-  document.getElementById('userCallInput').value = userCall;
-  document.getElementById('settingsCard').style.display = 'block';
-  document.getElementById('mainCard').style.display = 'none';
+function setTone(el, tone) {
+  document.querySelectorAll("#toneChips .chip").forEach(c => c.classList.remove("active"));
+  el.classList.add("active");
+  selectedTone = tone;
 }
 
-function skipSettings() {
-  document.getElementById('settingsCard').style.display = 'none';
-  document.getElementById('mainCard').style.display = 'block';
-}
+// --------------------------------------------------
+// 機能3: 写真選択 & 6枚グリッドレンダリング（初期枠復活）
+// --------------------------------------------------
+function handleFileSelect(event) {
+  const files = Array.from(event.target.files);
+  if (!files.length) return;
 
-async function saveRelationship() {
-  aiName = document.getElementById('aiNameInput').value.trim() || '相棒';
-  userCall = document.getElementById('userCallInput').value.trim() || 'ボス';
+  const remaining = 6 - imagesData.length;
+  const targetFiles = files.slice(0, remaining);
 
-  localStorage.setItem('meshi_ai_name', aiName);
-  localStorage.setItem('meshi_user_call', userCall);
-
-  updateHeader();
-  skipSettings();
-  greet();
-
-  await fetch(`${RELAY_SERVER_URL}/api/user`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, aiName, userCall })
-  }).catch(() => {});
-}
-
-function selectMood(el, mood) {
-  document.querySelectorAll('#moodChips .chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  selectedMood = mood;
-}
-
-function selectLength(el, len) {
-  document.querySelectorAll('#lengthChips .chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  selectedLength = len;
-  
-  if (currentLog) {
-    document.getElementById('xPostText').value = len === 'short' ? currentLog.x_post_short : currentLog.x_post_long;
-    updateXLink(document.getElementById('xPostText').value);
-  }
-}
-
-function compressImage(file) {
-  return new Promise((resolve) => {
+  let processed = 0;
+  targetFiles.forEach(file => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const maxDim = 1200;
-        let w = img.width, h = img.height;
-        if (w > maxDim || h > maxDim) {
-          if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
-          else { w = Math.round((w * maxDim) / h); h = maxDim; }
+      compressImage(e.target.result, (compressedUrl) => {
+        imagesData.push(compressedUrl);
+        processed++;
+        if (processed === targetFiles.length) {
+          renderGrid();
         }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-        resolve({ dataUrl, base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
-      };
-      img.src = e.target.result;
+      });
     };
     reader.readAsDataURL(file);
   });
 }
 
-function createTinyThumb(dataUrl) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const maxDim = 240;
-      let w = img.width, h = img.height;
+function compressImage(dataUrl, callback) {
+  const img = new Image();
+  img.onload = () => {
+    const maxDim = 1200;
+    let w = img.width, h = img.height;
+    if (w > maxDim || h > maxDim) {
       if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
       else { w = Math.round((w * maxDim) / h); h = maxDim; }
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/jpeg', 0.6));
-    };
-    img.src = dataUrl;
-  });
-}
-async function handleImages(event) {
-  const files = Array.from(event.target.files).slice(0, 6);
-  if (!files.length) return;
-
-  for (const f of files) {
-    if (imagesData.length >= 6) break;
-    const comp = await compressImage(f);
-    imagesData.push(comp);
-  }
-  renderPreviews();
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, w, h);
+    callback(canvas.toDataURL("image/jpeg", 0.82));
+  };
+  img.src = dataUrl;
 }
 
-function renderPreviews() {
-  const grid = document.getElementById('previewGrid');
-  grid.innerHTML = '';
+function renderGrid() {
+  const grid = document.getElementById("photoGrid");
+  grid.innerHTML = "";
 
-  imagesData.forEach((img, idx) => {
-    const box = document.createElement('div');
-    box.className = 'thumb-box';
-
-    const thumb = document.createElement('img');
-    thumb.src = img.dataUrl;
-    thumb.className = 'preview-thumb';
-
-    const delBtn = document.createElement('div');
-    delBtn.className = 'del-badge';
-    delBtn.innerText = '✕';
-    delBtn.onclick = () => removeImage(idx);
-
-    box.appendChild(thumb);
-    box.appendChild(delBtn);
-    grid.appendChild(box);
+  imagesData.forEach((dataUrl, idx) => {
+    const cell = document.createElement("div");
+    cell.className = "photo-cell";
+    cell.innerHTML = `
+      <img src="${dataUrl}" onclick="openImageModal(${idx})">
+      <div class="del-btn" onclick="removeImage(${idx})">✕</div>
+    `;
+    grid.appendChild(cell);
   });
 
-  const analyzeBtn = document.getElementById('btnAnalyze');
-  if (analyzeBtn) {
-    analyzeBtn.style.display = imagesData.length > 0 ? 'block' : 'none';
+  if (imagesData.length < 6) {
+    const addCell = document.createElement("div");
+    addCell.className = "photo-cell add-cell";
+    addCell.innerHTML = `
+      <span style="font-size: 1.5rem; line-height: 1;">＋</span>
+      <span>${imagesData.length}/6</span>
+    `;
+    addCell.onclick = () => document.getElementById("fileInput").click();
+    grid.appendChild(addCell);
   }
+
+  const hasPhotos = imagesData.length > 0;
+  document.getElementById("btnQuickUpload").disabled = !hasPhotos;
+  document.getElementById("btnProGenerate").disabled = !hasPhotos;
 }
 
-function removeImage(index) {
-  imagesData.splice(index, 1);
-  renderPreviews();
-  if (imagesData.length === 0) {
-    document.getElementById('resultSection').style.display = 'none';
-  }
+function removeImage(idx) {
+  imagesData.splice(idx, 1);
+  renderGrid();
+  document.getElementById("resultArea").style.display = "none";
 }
 
-async function analyzeImages() {
+// --------------------------------------------------
+// 機能4: 【おまかせモード】1秒保存先行 ＆ 非同期処理
+// --------------------------------------------------
+async function uploadQuick() {
   if (!imagesData.length) return;
+  const btn = document.getElementById("btnQuickUpload");
+  btn.disabled = true;
+  btn.innerText = "⚡ 預かり中…";
 
-  const voiceEl = document.getElementById('aiVoiceBubble');
-  const alertEl = document.getElementById('safetyAlert');
-  const resultSec = document.getElementById('resultSection');
-  const shareBtn = document.getElementById('xShareBtn');
-  const analyzeBtn = document.getElementById('btnAnalyze');
+  try {
+    const res = await fetch(`${RELAY_SERVER_URL}/api/meals/upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        images: imagesData,
+        photoThumb: imagesData[0]
+      })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || "保存に失敗しました");
 
-  // スピナー付きローディング表示 ＆ 連打防止
-  if (analyzeBtn) {
-    analyzeBtn.disabled = true;
-    analyzeBtn.innerHTML = '<span class="spinner"></span>解析中…（相棒が確認中）';
-    analyzeBtn.style.opacity = '0.7';
-    analyzeBtn.style.cursor = 'not-allowed';
+    showToast("⚡ ログアシスタントが預かりました！解析は裏側で進めます。");
+
+    // X下書き用ポーリング（裏側の解析が終わるのを待ってXリンクを出す）
+    pollMealResult(data.mealId);
+
+  } catch (err) {
+    alert("エラー: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerText = "⚡ 預ける（1秒で完了）";
   }
-
-  voiceEl.innerText = `解析中… ${aiName}が写真${imagesData.length}枚をチェック中！`;
-  alertEl.style.display = 'none';
-  resultSec.style.display = 'none';
-
-  const prompt = `
-あなたは${userCall}の専属AI「${aiName}」です。32歳くらいのしっかり者で、ストレートかつユーモアを交えて話します。
-今日の${userCall}の気分は「${selectedMood}」です。
-渡された写真（${imagesData.length}枚）を解析し、純粋なJSONのみを出力してください。
-
-【ジャンルの自動判定とコメント方針】
-- 料理・食事の写真:
-  料理名や素材、見た目の魅力を引き立て、美味しそうにリアクションしてください。
-- 料理以外の写真（風景、お出かけ、ゴルフや趣味、仕事、乗り物、ペット、日常のアイテムなど）:
-  無理に食事に結びつけず、写っている情景や雰囲気、${userCall}の過ごした時間やこだわりに対してウィットと共感を込めてコメントしてください。
-
-【最重要・セキュリティ判定】
-写真内に個人情報（レシート・クレジットカード・書類・免許証・他人の顔の明確な写り込みなど）があるか判定してください。
-
-【出力JSONフォーマット】
-{
-  "has_sensitive_data": true または false,
-  "safety_warning": "機密情報や顔がある場合の警告文。問題なければ空文字",
-  "ai_comment": "${aiName}としてのツッコミ・感想（${userCall}と呼びかけること）",
-  "x_post_short": "X用ポスト文（80〜100字程度、ハッシュタグと絵文字含む）",
-  "x_post_long": "X用ポスト文（180〜220字程度で詳細、ハッシュタグと絵文字含む）",
-  "best_image_idx": 0
 }
+
+// 非同期解析完了待ち
+async function pollMealResult(mealId) {
+  let attempts = 0;
+  const interval = setInterval(async () => {
+    attempts++;
+    if (attempts > 15) { clearInterval(interval); return; }
+
+    const res = await fetch(`${RELAY_SERVER_URL}/api/meals/status?id=${mealId}`);
+    const record = await res.json();
+
+    if (record && record.status === "done") {
+      clearInterval(interval);
+      displayResult(record.ai_comment, record.x_post_text, record.privacy_warning);
+    }
+  }, 2000);
+}
+
+// --------------------------------------------------
+// 機能5: 【PROモード】リアルタイムGemini生成
+// --------------------------------------------------
+async function generatePro() {
+  if (!imagesData.length) return;
+  const btn = document.getElementById("btnProGenerate");
+  btn.disabled = true;
+  btn.innerText = "✨ 生成中…";
+
+  const promptText = `
+あなたは${userCall}専属の「${aiName}」です。トーン: ${selectedTone}。
+画像（${imagesData.length}枚）を解析し、以下のJSON形式で回答してください。
+- aiComment: ${userCall}に寄り添う親身なツッコミ（30〜60文字）。
+- xPostText: X投稿用短文（口癖「${myPhrase}」を入れ、ハッシュタグ付き）。
+- privacyWarning: 個人情報や顔写り込みがある場合は true、なければ false。
 `;
 
-  const parts = [{ text: prompt }];
+  const parts = [{ text: promptText }];
   imagesData.forEach(img => {
-    parts.push({ inline_data: { mime_type: img.mimeType, data: img.base64 } });
+    parts.push({
+      inline_data: {
+        mime_type: "image/jpeg",
+        data: img.replace(/^data:image\/\w+;base64,/, "")
+      }
+    });
   });
 
   try {
@@ -224,292 +214,162 @@ async function analyzeImages() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contents: [{ parts }] })
     });
-
     const data = await res.json();
     let rawText = data.candidates[0].content.parts[0].text;
-    rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-    const result = JSON.parse(rawText);
+    rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(rawText);
 
-    currentLog = result;
-    voiceEl.innerText = result.ai_comment;
-
-    const postContent = selectedLength === 'short' ? result.x_post_short : result.x_post_long;
-    document.getElementById('xPostText').value = postContent;
-
-    if (result.has_sensitive_data) {
-      alertEl.innerText = `⚠️ 警告: ${result.safety_warning}\n個人情報保護のため、X共有ボタンを無効化しています。`;
-      alertEl.style.display = 'block';
-      shareBtn.style.pointerEvents = 'none';
-      shareBtn.style.opacity = '0.3';
-    } else {
-      shareBtn.style.pointerEvents = 'auto';
-      shareBtn.style.opacity = '1';
-      updateXLink(postContent);
-    }
-
-    resultSec.style.display = 'block';
-
-    // 完了時：ボタンを復元
-    if (analyzeBtn) {
-      analyzeBtn.disabled = false;
-      analyzeBtn.innerHTML = '🔍 この写真で解析する';
-      analyzeBtn.style.opacity = '1';
-      analyzeBtn.style.cursor = 'pointer';
-    }
+    displayResult(parsed.aiComment, parsed.xPostText, parsed.privacyWarning);
   } catch (err) {
-    voiceEl.innerText = "うーん、解析でエラーが出ちゃった！もう一度試してみて。";
-    console.error(err);
-
-    // エラー時：ボタンを復元
-    if (analyzeBtn) {
-      analyzeBtn.disabled = false;
-      analyzeBtn.innerHTML = '🔍 この写真で解析する';
-      analyzeBtn.style.opacity = '1';
-      analyzeBtn.style.cursor = 'pointer';
-    }
-  }
-}
-
-function updateXLink(text) {
-  const shareBtn = document.getElementById('xShareBtn');
-  shareBtn.href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
-}
-
-document.getElementById('xPostText').addEventListener('input', (e) => {
-  updateXLink(e.target.value);
-});
-
-async function saveToCloudAndDiscord() {
-  if (!currentLog) return;
-
-  const saveBtn = document.getElementById('btnSaveCloud');
-  if (saveBtn) {
-    saveBtn.disabled = true;
-    saveBtn.innerHTML = '<span class="spinner"></span>保存中…';
-    saveBtn.style.opacity = '0.7';
-    saveBtn.style.cursor = 'not-allowed';
-  }
-
-  try {
-    const editedPost = document.getElementById('xPostText').value;
-    const mealId = 'meal_' + Date.now();
-    const bestIdx = currentLog.best_image_idx || 0;
-    const targetImg = imagesData[bestIdx] || imagesData[0];
-    const photoThumb = targetImg ? await createTinyThumb(targetImg.dataUrl) : null;
-    const allPhotos = imagesData.map(img => img.dataUrl);
-
-    await fetch(`${RELAY_SERVER_URL}/api/save-log`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId,
-        mealId,
-        aiComment: currentLog.ai_comment,
-        xPostText: editedPost,
-        bestIdx: bestIdx,
-        photoThumb: photoThumb,
-        allPhotos: allPhotos
-      })
-    });
-
-    const payload = {
-      embeds: [{
-        title: `🍽️ ${userCall}のメシログ（AI: ${aiName}）`,
-        color: 15339532,
-        description: `**気分:** ${selectedMood}\n**${aiName}のツッコミ:**\n${currentLog.ai_comment}`,
-        fields: [{ name: "📱 Xポスト内容", value: editedPost }],
-        footer: { text: `User ID: ${userId} | ${new Date().toLocaleString()}` }
-      }]
-    };
-
-    const formData = new FormData();
-    formData.append("payload_json", JSON.stringify(payload));
-
-    imagesData.forEach((img, i) => {
-      const byteChars = atob(img.base64);
-      const byteNums = new Array(byteChars.length);
-      for (let j = 0; j < byteChars.length; j++) byteNums[j] = byteChars.charCodeAt(j);
-      const blob = new Blob([new Uint8Array(byteNums)], { type: img.mimeType });
-      formData.append(`files[${i}]`, blob, `meal_${i + 1}.jpg`);
-    });
-
-    await fetch(`${RELAY_SERVER_URL}/api/discord`, { method: "POST", body: formData });
-
-    alert("D1データベースとDiscordに保存完了しました！");
-    resetAll();
-  } catch (err) {
-    alert("保存中にエラーが発生しました。もう一度試してください。");
-    console.error(err);
+    alert("生成エラー: " + err.message);
   } finally {
-    if (saveBtn) {
-      saveBtn.disabled = false;
-      saveBtn.innerHTML = '💾 クラウド＆Discordに記録してリセット';
-      saveBtn.style.opacity = '1';
-      saveBtn.style.cursor = 'pointer';
-    }
+    btn.disabled = false;
+    btn.innerText = "✨ じっくり生成してプレビュー";
   }
 }
 
-function resetAll() {
-  imagesData = [];
-  currentLog = null;
-  document.getElementById('previewGrid').innerHTML = '';
-  document.getElementById('btnAnalyze').style.display = 'none';
-  document.getElementById('resultSection').style.display = 'none';
-  document.getElementById('safetyAlert').style.display = 'none';
-  document.getElementById('fileInput').value = '';
-  greet();
-}
-// D1から過去ログを取得して表示
-async function loadMealHistory() {
-  const modal = document.getElementById('historyModal');
-  const list = document.getElementById('historyList');
-  modal.style.display = 'block';
-  document.getElementById('mainCard').style.display = 'none';
+// --------------------------------------------------
+// 機能6: 解析結果表示 & Xシェアリンク
+// --------------------------------------------------
+function displayResult(comment, postText, privacyWarning) {
+  const resultArea = document.getElementById("resultArea");
+  const commentEl = document.getElementById("aiComment");
+  const xTextEl = document.getElementById("xText");
+  const xShareBtn = document.getElementById("btnXShare");
+  const alertBox = document.getElementById("alertBox");
 
+  if (privacyWarning) {
+    alertBox.innerText = "⚠️ 個人情報や顔の写り込みが検知されました。投稿内容を確認してください。";
+    alertBox.style.display = "block";
+  } else {
+    alertBox.style.display = "none";
+  }
+
+  commentEl.innerText = comment || "記録完了！";
+  xTextEl.value = postText || "";
+
+  updateXShareLink(postText);
+  xTextEl.oninput = () => updateXShareLink(xTextEl.value);
+
+  resultArea.style.display = "block";
+}
+
+function updateXShareLink(text) {
+  const btn = document.getElementById("btnXShare");
+  btn.href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text || "")}`;
+}
+
+function showToast(msg) {
+  const box = document.getElementById("toastBox");
+  box.innerText = msg;
+  box.style.display = "block";
+  setTimeout(() => { box.style.display = "none"; }, 4000);
+}
+
+// --------------------------------------------------
+// 機能7: 設定モーダル制御 & D1保存
+// --------------------------------------------------
+function openSettings() {
+  document.getElementById("userCallInput").value = userCall;
+  document.getElementById("aiNameInput").value = aiName;
+  document.getElementById("myPhraseInput").value = myPhrase;
+  document.getElementById("discordInput").value = discordWebhook;
+  document.getElementById("lineInput").value = lineId;
+  document.getElementById("settingsCard").style.display = "block";
+  document.getElementById("mainCard").style.display = "none";
+}
+
+function closeSettings() {
+  document.getElementById("settingsCard").style.display = "none";
+  document.getElementById("mainCard").style.display = "block";
+}
+
+function setCall(val) { document.getElementById("userCallInput").value = val; }
+function setAiName(val) { document.getElementById("aiNameInput").value = val; }
+function setPhrase(val) { document.getElementById("myPhraseInput").value = val; }
+
+async function saveSettings() {
+  userCall = document.getElementById("userCallInput").value.trim() || "ニックネーム";
+  aiName = document.getElementById("aiNameInput").value.trim() || "ログアシスタント";
+  myPhrase = document.getElementById("myPhraseInput").value.trim() || "リピ確定！";
+  discordWebhook = document.getElementById("discordInput").value.trim();
+  lineId = document.getElementById("lineInput").value.trim();
+
+  localStorage.setItem("meshi_user_call", userCall);
+  localStorage.setItem("meshi_ai_name", aiName);
+  localStorage.setItem("meshi_my_phrase", myPhrase);
+  localStorage.setItem("meshi_discord_webhook", discordWebhook);
+  localStorage.setItem("meshi_line_id", lineId);
+
+  updateUIHeaders();
+
+  await fetch(`${RELAY_SERVER_URL}/api/user`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, aiName, userCall, myPhrase, discordWebhook, lineId })
+  }).catch(() => {});
+
+  alert("設定を保存しました！");
+  closeSettings();
+}
+
+// --------------------------------------------------
+// 機能8: 過去ログ表示
+// --------------------------------------------------
+async function loadMealHistory() {
+  const modal = document.getElementById("historyModal");
+  const list = document.getElementById("historyList");
+  modal.style.display = "block";
+  document.getElementById("mainCard").style.display = "none";
   list.innerHTML = '<div style="color: #94a3b8; font-size: 0.85rem; text-align: center;">読み込み中…</div>';
 
   try {
     const res = await fetch(`${RELAY_SERVER_URL}/api/logs?userId=${userId}`);
     const data = await res.json();
-
     if (!data.results || data.results.length === 0) {
       list.innerHTML = '<div style="color: #94a3b8; font-size: 0.85rem; text-align: center;">まだ記録がありません。</div>';
       return;
     }
-
-    list.innerHTML = '';
-   data.results.forEach(item => {
-      const card = document.createElement('div');
+    list.innerHTML = "";
+    data.results.forEach(item => {
+      const card = document.createElement("div");
       card.style.cssText = "background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px;";
-      
-      let photosHtml = '';
-      let photos = [];
-      try {
-        if (item.all_photos) photos = JSON.parse(item.all_photos);
-      } catch (e) {}
-
-      if (photos.length > 0) {
-        // 写真リスト全体を渡す
-        const photosJson = JSON.stringify(photos).replace(/"/g, '&quot;');
-        photosHtml = `<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px;">` +
-          photos.map((p, idx) => `<img src="${p}" onclick="openGallery(${photosJson}, ${idx})" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer;">`).join('') +
-          `</div>`;
-      } else if (item.photo_thumb) {
-        photosHtml = `<img src="${item.photo_thumb}" onclick="openGallery(['${item.photo_thumb}'], 0)" style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; margin-bottom: 8px; cursor: pointer;">`;
-      }
-
+      let imgTag = item.photo_thumb ? `<img src="${item.photo_thumb}" style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; margin-bottom: 8px;">` : "";
       card.innerHTML = `
-        ${photosHtml}
+        ${imgTag}
         <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 6px;">${item.created_at}</div>
-        <div style="font-size: 0.85rem; color: #6ee7b7; margin-bottom: 8px; font-weight: bold;">💬 ${item.ai_comment}</div>
-        <div style="font-size: 0.82rem; color: #e2e8f0; white-space: pre-wrap; background: #1e293b; padding: 8px; border-radius: 6px;">${item.x_post_text}</div>
+        <div style="font-size: 0.85rem; color: #6ee7b7; margin-bottom: 8px; font-weight: bold;">💬 ${item.ai_comment || "記録完了"}</div>
+        <div style="font-size: 0.82rem; color: #e2e8f0; white-space: pre-wrap; background: #1e293b; padding: 8px; border-radius: 6px;">${item.x_post_text || ""}</div>
       `;
       list.appendChild(card);
     });
   } catch (err) {
-    list.innerHTML = '<div style="color: #f87171; font-size: 0.85rem; text-align: center;">ログの取得に失敗しました。</div>';
+    list.innerHTML = '<div style="color: #f87171; font-size: 0.85rem; text-align: center;">ログ取得に失敗しました。</div>';
   }
 }
 
 function closeHistory() {
-  document.getElementById('historyModal').style.display = 'none';
-  document.getElementById('mainCard').style.display = 'block';
-}
-// Googleログインコールバック
-async function handleGoogleLogin(response) {
-  try {
-    const res = await fetch(`${RELAY_SERVER_URL}/api/auth/google`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ credential: response.credential, currentUserId: userId })
-    });
-    const data = await res.json();
-    if (data.success && data.userId) {
-      localStorage.setItem("meshi_user_id", data.userId);
-      const statusEl = document.getElementById("googleAuthStatus");
-      if (statusEl) statusEl.innerText = `✅ 連携中: ${data.email}`;
-      alert(`Googleアカウント（${data.email}）と連携・同期しました！`);
-      location.reload();
-    } else {
-      alert("ログインに失敗しました: " + (data.error || ""));
-    }
-  } catch (e) {
-    alert("通信エラーが発生しました: " + e.message);
-  }
-}
-// ギャラリー・スワイプ制御
-let currentGalleryList = [];
-let currentGalleryIndex = 0;
-let touchStartX = 0;
-let touchEndX = 0;
-
-function openGallery(photoList, startIndex = 0) {
-  currentGalleryList = photoList;
-  currentGalleryIndex = startIndex;
-  updateGalleryView();
-  const modal = document.getElementById('imageModal');
-  if (modal) modal.style.display = 'flex';
+  document.getElementById("historyModal").style.display = "none";
+  document.getElementById("mainCard").style.display = "block";
 }
 
-function updateGalleryView() {
-  const modalImg = document.getElementById('imageModalImg');
-  const counter = document.getElementById('modalCounter');
-  const prevBtn = document.getElementById('modalPrevBtn');
-  const nextBtn = document.getElementById('modalNextBtn');
-
-  if (modalImg && currentGalleryList.length > 0) {
-    modalImg.src = currentGalleryList[currentGalleryIndex];
-  }
-  if (counter) {
-    counter.innerText = `${currentGalleryIndex + 1} / ${currentGalleryList.length}`;
-    counter.style.display = currentGalleryList.length > 1 ? 'block' : 'none';
-  }
-  if (prevBtn) prevBtn.style.display = currentGalleryIndex > 0 ? 'flex' : 'none';
-  if (nextBtn) nextBtn.style.display = currentGalleryIndex < currentGalleryList.length - 1 ? 'flex' : 'none';
+// --------------------------------------------------
+// 機能9: 画像スワイプ拡大モーダル
+// --------------------------------------------------
+let modalIndex = 0;
+function openImageModal(idx) {
+  modalIndex = idx;
+  document.getElementById("modalImg").src = imagesData[modalIndex];
+  document.getElementById("imageModal").style.display = "flex";
 }
-
-function showPrevImage() {
-  if (currentGalleryIndex > 0) {
-    currentGalleryIndex--;
-    updateGalleryView();
-  }
+function closeImageModal() {
+  document.getElementById("imageModal").style.display = "none";
 }
-
-function showNextImage() {
-  if (currentGalleryIndex < currentGalleryList.length - 1) {
-    currentGalleryIndex++;
-    updateGalleryView();
-  }
+function prevImage(e) {
+  e.stopPropagation();
+  if (modalIndex > 0) { modalIndex--; openImageModal(modalIndex); }
 }
-
-function closeImageModal(e) {
-  if (e && e.target.id !== 'imageModal' && !e.target.innerText.includes('✕')) return;
-  const modal = document.getElementById('imageModal');
-  if (modal) modal.style.display = 'none';
-}
-
-// タッチスワイプ検知
-document.addEventListener('DOMContentLoaded', () => {
-  const modal = document.getElementById('imageModal');
-  if (!modal) return;
-
-  modal.addEventListener('touchstart', (e) => {
-    touchStartX = e.changedTouches[0].screenX;
-  }, { passive: true });
-
-  modal.addEventListener('touchend', (e) => {
-    touchEndX = e.changedTouches[0].screenX;
-    handleSwipeGesture();
-  }, { passive: true });
-});
-
-function handleSwipeGesture() {
-  const swipeThreshold = 40; // スワイプと判定する移動距離(px)
-  const diff = touchEndX - touchStartX;
-  if (diff < -swipeThreshold) {
-    showNextImage(); // 左スワイプで次の写真
-  } else if (diff > swipeThreshold) {
-    showPrevImage(); // 右スワイプで前の写真
-  }
+function nextImage(e) {
+  e.stopPropagation();
+  if (modalIndex < imagesData.length - 1) { modalIndex++; openImageModal(modalIndex); }
 }
