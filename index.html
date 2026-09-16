@@ -159,18 +159,15 @@
 
     <!-- メイン操作画面 -->
     <div id="mainCard" class="card">
-     <div class="header-bar">
-      <div class="header-title-area">
-        <div class="title">🍽️ めしログ＆ライフログ</div>
-        <span id="headerAiTitle" style="font-size: 0.8rem; font-weight: bold; color: #94a3b8;">アシスタント: ララ</span>
-      </div>
-      <div style="display: flex; gap: 6px; flex-shrink: 0;"> <!-- ボタンエリアは縮ませない -->
-        <button class="btn-gear" onclick="loadMealHistory()">
-          <span>📖</span><span>過去ログ</span>
-        </button>
-        <button class="btn-gear" onclick="openSettings()">
-          <span>⚙️</span><span>設定</span>
-        </button>
+     <!-- ヘッダーエリア（1行目にタイトル、2行目にアシスタントとボタン） -->
+    <div style="margin-bottom: 12px;">
+      <div class="title" style="margin-bottom: 6px;">🍽️ めしログ＆ライフログ</div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span id="headerAiTitle" style="font-size: 0.85rem; font-weight: bold; color: #94a3b8;">アシスタント: ララ</span>
+        <div style="display: flex; gap: 6px;">
+          <button class="btn-gear" onclick="loadMealHistory()">📖 過去ログ</button>
+          <button class="btn-gear" onclick="openSettings()">⚙️ 設定</button>
+        </div>
       </div>
     </div>
 
