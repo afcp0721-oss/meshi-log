@@ -162,6 +162,17 @@
           <span class="chip" onclick="setTone(this, 'グルメ評論家')">グルメ評論家</span>
           <span class="chip" onclick="setTone(this, '辛口ツッコミ')">辛口ツッコミ</span>
         </div>
+
+        <label>今日の気分（任意）</label>
+        <div class="chip-wrap" id="moodChips">
+          <span class="chip" onclick="toggleMood(this, '最高')">😍 最高</span>
+          <span class="chip" onclick="toggleMood(this, 'ガッツリ')">💪 ガッツリ</span>
+          <span class="chip" onclick="toggleMood(this, 'ヘルシー')">🥗 ヘルシー</span>
+          <span class="chip" onclick="toggleMood(this, 'サクッと')">⚡ サクッと</span>
+          <span class="chip" onclick="toggleMood(this, 'ご褒美')">✨ ご褒美</span>
+          <span class="chip" id="dynamicPhraseChip" onclick="toggleMood(this, '')">リピ確定！</span>
+        </div>
+
         <button id="btnProGenerate" class="btn-main" onclick="generatePro()" disabled>✨ じっくり生成してプレビュー</button>
       </div>
 
