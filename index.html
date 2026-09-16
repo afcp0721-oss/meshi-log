@@ -10,10 +10,10 @@
     .app-container { width: 100%; max-width: 480px; }
     .card { background: #1e293b; border-radius: 14px; padding: 18px; border: 1px solid #334155; margin-bottom: 16px; position: relative; }
     .title {
-      font-size: 1.2rem;
+      font-size: 1.35rem;
       font-weight: 800;
       color: #f97316;
-      margin-bottom: 2px;
+      margin-bottom: 8px;
       white-space: nowrap;
     }
     .desc {
@@ -159,11 +159,11 @@
 
     <!-- メイン操作画面 -->
     <div id="mainCard" class="card">
-     <!-- ヘッダーエリア（1行目にタイトル、2行目にアシスタントとボタン） -->
-    <div style="margin-bottom: 12px;">
-      <div class="title" style="margin-bottom: 6px;">🍽️ めしログ＆ライフログ</div>
+     <!-- ヘッダーエリア（1行目に大見出し、2行目にAI名とボタンを整列） -->
+    <div style="margin-bottom: 14px;">
+      <div class="title">🍽️ めしログ＆ライフログ</div>
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span id="headerAiTitle" style="font-size: 0.85rem; font-weight: bold; color: #94a3b8;">ログAI: ログアシスタント</span>
+        <span id="headerAiTitle" style="font-size: 0.82rem; font-weight: bold; color: #94a3b8;">ログAI: ログアシスタント</span>
         <div style="display: flex; gap: 6px;">
           <button class="btn-gear" onclick="loadMealHistory()">📖 過去ログ</button>
           <button class="btn-gear" onclick="openSettings()">⚙️ 設定</button>
