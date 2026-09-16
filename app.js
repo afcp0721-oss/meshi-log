@@ -28,6 +28,23 @@ window.addEventListener("DOMContentLoaded", () => {
 function updateUIHeaders() {
   const headerEl = document.getElementById("headerAiTitle");
   if (headerEl) headerEl.innerText = `アシスタント: ${aiName}`;
+  const phraseChip = document.getElementById("dynamicPhraseChip");
+  if (phraseChip) {
+    phraseChip.innerText = myPhrase || "リピ確定！";
+    phraseChip.setAttribute("onclick", `toggleMood(this, '${myPhrase}')`);
+  }
+}
+
+let selectedMood = "";
+function toggleMood(el, mood) {
+  const isAlready = el.classList.contains("active");
+  document.querySelectorAll("#moodChips .chip").forEach(c => c.classList.remove("active"));
+  if (!isAlready) {
+    el.classList.add("active");
+    selectedMood = mood || el.innerText;
+  } else {
+    selectedMood = "";
+  }
 }
 
 // --------------------------------------------------
@@ -208,21 +225,31 @@ async function generatePro() {
     });
   });
 
-  try {
-    const res = await fetch(`${RELAY_SERVER_URL}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts }] })
-    });
-    const data = await res.json();
-    let rawText = data.candidates[0].content.parts[0].text;
-    rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
-    const parsed = JSON.parse(rawText);
+ try {
+      const res = await fetch(`${RELAY_SERVER_URL}/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts }] })
+      });
+      const data = await res.json();
 
-    displayResult(parsed.aiComment, parsed.xPostText, parsed.privacyWarning);
-  } catch (err) {
-    alert("生成エラー: " + err.message);
-  } finally {
+      // エラーの詳細をそのままアラートに表示するガード
+      if (!res.ok || data.error) {
+        throw new Error(data.error?.message || JSON.stringify(data));
+      }
+      if (!data.candidates || !data.candidates[0]) {
+        throw new Error("Geminiから回答が取得できませんでした: " + JSON.stringify(data));
+      }
+
+      let rawText = data.candidates[0].content.parts[0].text;
+      rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+      const parsed = JSON.parse(rawText);
+
+      displayResult(parsed.aiComment, parsed.xPostText, parsed.privacyWarning);
+    } catch (err) {
+      alert("生成エラー: " + err.message);
+    }
+ finally {
     btn.disabled = false;
     btn.innerText = "✨ じっくり生成してプレビュー";
   }
