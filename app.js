@@ -27,7 +27,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
 function updateUIHeaders() {
   const headerEl = document.getElementById("headerAiTitle");
-  if (headerEl) headerEl.innerText = `アシスタント: ${aiName}`;
+  if (headerEl) headerEl.innerText = `ログAI: ${aiName}`;
   const phraseChip = document.getElementById("dynamicPhraseChip");
   if (phraseChip) {
     phraseChip.innerText = myPhrase || "リピ確定！";
