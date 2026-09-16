@@ -178,7 +178,7 @@ async function uploadQuick() {
 
   } catch (err) {
     alert("エラー: " + err.message);
-  finally {
+  }finally {
     btn.disabled = false;
     if (spin) spin.style.display = "none";
     if (text) text.innerText = "⚡ 預ける（1秒で完了）";
@@ -208,8 +208,11 @@ async function pollMealResult(mealId) {
 async function generatePro() {
   if (!imagesData.length) return;
   const btn = document.getElementById("btnProGenerate");
+  const spin = document.getElementById("spinPro");
+  const text = document.getElementById("textPro");
   btn.disabled = true;
-  btn.innerText = "✨ 生成中…";
+  if (spin) spin.style.display = "inline-block";
+  if (text) text.innerText = "生成中…";
 
   const promptText = `
 あなたは${userCall}専属の「${aiName}」です。トーン: ${selectedTone}。
