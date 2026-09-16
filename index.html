@@ -9,11 +9,39 @@
     body { background: #0f172a; color: #f8fafc; padding: 16px; display: flex; justify-content: center; }
     .app-container { width: 100%; max-width: 480px; }
     .card { background: #1e293b; border-radius: 14px; padding: 18px; border: 1px solid #334155; margin-bottom: 16px; position: relative; }
-    .title { font-size: 1.2rem; font-weight: 800; color: #f97316; margin-bottom: 6px; }
-    .desc { font-size: 0.85rem; color: #94a3b8; margin-bottom: 14px; }
-    .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .btn-gear { background: transparent; border: 1px solid #475569; color: #cbd5e1; border-radius: 8px; padding: 5px 10px; font-size: 0.8rem; cursor: pointer; }
-    
+    .title {
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: #f97316;
+      margin-bottom: 2px;
+      white-space: nowrap;
+    }
+    .desc {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-bottom: 14px;
+    }
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      gap: 8px;
+    }
+    .btn-gear {
+      background: transparent;
+      border: 1px solid #475569;
+      color: #cbd5e1;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
     /* モード切替タブ */
     .mode-switch { display: flex; background: #0f172a; border-radius: 10px; padding: 4px; border: 1px solid #334155; margin-bottom: 14px; }
     .mode-btn { flex: 1; text-align: center; padding: 8px; font-size: 0.85rem; font-weight: bold; color: #94a3b8; cursor: pointer; border-radius: 8px; border: none; background: transparent; }
@@ -131,16 +159,20 @@
 
     <!-- メイン操作画面 -->
     <div id="mainCard" class="card">
-      <div class="header-bar">
-        <div>
-          <div class="title">🍽️ めしログ＆ライフログ</div>
-          <span id="headerAiTitle" style="font-size: 0.82rem; font-weight: bold; color: #94a3b8;">アシスタント: ログアシスタント</span>
-        </div>
-        <div style="display: flex; gap: 6px;">
-          <button class="btn-gear" onclick="loadMealHistory()">📖 過去ログ</button>
-          <button class="btn-gear" onclick="openSettings()">⚙️ 設定</button>
-        </div>
+     <div class="header-bar">
+      <div class="header-title-area">
+        <div class="title">🍽️ めしログ＆ライフログ</div>
+        <span id="headerAiTitle" style="font-size: 0.8rem; font-weight: bold; color: #94a3b8;">アシスタント: ララ</span>
       </div>
+      <div style="display: flex; gap: 6px; flex-shrink: 0;"> <!-- ボタンエリアは縮ませない -->
+        <button class="btn-gear" onclick="loadMealHistory()">
+          <span>📖</span><span>過去ログ</span>
+        </button>
+        <button class="btn-gear" onclick="openSettings()">
+          <span>⚙️</span><span>設定</span>
+        </button>
+      </div>
+    </div>
 
       <!-- モード切り替えタブ -->
       <div class="mode-switch">
@@ -217,6 +249,6 @@
   </div>
 
   <!-- スクリプト読み込み（キャッシュ対策 v=4） -->
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
