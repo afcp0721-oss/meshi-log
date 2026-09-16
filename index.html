@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>メシログ AI</title>
+  <title>めしログ＆ライフログ</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: #0f172a; color: #f8fafc; padding: 16px; display: flex; justify-content: center; }
@@ -12,161 +12,180 @@
     .title { font-size: 1.2rem; font-weight: 800; color: #f97316; margin-bottom: 6px; }
     .desc { font-size: 0.85rem; color: #94a3b8; margin-bottom: 14px; }
     .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .btn-gear { background: transparent; border: 1px solid #475569; color: #cbd5e1; border-radius: 8px; padding: 4px 8px; font-size: 0.8rem; cursor: pointer; }
-    label { font-size: 0.8rem; font-weight: 700; color: #cbd5e1; display: block; margin: 10px 0 4px; }
+    .btn-gear { background: transparent; border: 1px solid #475569; color: #cbd5e1; border-radius: 8px; padding: 5px 10px; font-size: 0.8rem; cursor: pointer; }
+    
+    /* モード切替タブ */
+    .mode-switch { display: flex; background: #0f172a; border-radius: 10px; padding: 4px; border: 1px solid #334155; margin-bottom: 14px; }
+    .mode-btn { flex: 1; text-align: center; padding: 8px; font-size: 0.85rem; font-weight: bold; color: #94a3b8; cursor: pointer; border-radius: 8px; border: none; background: transparent; }
+    .mode-btn.active { background: #ea580c; color: #fff; }
+
+    label { font-size: 0.8rem; font-weight: 700; color: #cbd5e1; display: block; margin: 12px 0 4px; }
     input[type="text"] { width: 100%; background: #0f172a; border: 1px solid #475569; color: #fff; padding: 10px; border-radius: 8px; font-size: 0.95rem; }
     .chip-wrap { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
-    .chip { background: #334155; color: #e2e8f0; font-size: 0.8rem; padding: 6px 12px; border-radius: 16px; cursor: pointer; border: 1px solid transparent; }
+    .chip { background: #334155; color: #e2e8f0; font-size: 0.8rem; padding: 5px 10px; border-radius: 16px; cursor: pointer; }
     .chip.active { background: #ea580c; color: #fff; font-weight: bold; }
-    .btn-main { width: 100%; background: #ea580c; color: #fff; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: 700; cursor: pointer; margin-top: 10px; }
+
+    /* 6枚写真グリッド枠（初期デザイン復活） */
+    .photo-grid-box { border: 2px dashed #475569; border-radius: 12px; padding: 12px; background: #0f172a; text-align: center; margin: 10px 0; }
+    .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+    .photo-cell { position: relative; width: 100%; aspect-ratio: 1/1; border-radius: 8px; overflow: hidden; border: 1px solid #334155; background: #1e293b; }
+    .photo-cell img { width: 100%; height: 100%; object-fit: cover; cursor: pointer; }
+    .photo-cell .del-btn { position: absolute; top: 4px; right: 4px; background: rgba(220, 38, 38, 0.9); color: #fff; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; cursor: pointer; }
+    .add-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #f97316; font-size: 0.75rem; border: 2px dashed #ea580c; cursor: pointer; }
+
+    /* ボタン類 */
+    .btn-main { width: 100%; background: #ea580c; color: #fff; border: none; padding: 14px; border-radius: 10px; font-size: 1rem; font-weight: 700; cursor: pointer; margin-top: 12px; }
     .btn-sub { width: 100%; background: transparent; color: #94a3b8; border: 1px solid #475569; padding: 10px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; margin-top: 8px; }
     .btn-x { background: #000; color: #fff; border: 1px solid #334155; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.9rem; margin-top: 10px; }
+
+    /* 吹き出し・警告・トースト */
     .bubble { background: #064e3b; border: 1px solid #059669; border-radius: 10px; padding: 12px; font-size: 0.88rem; color: #6ee7b7; line-height: 1.4; margin-bottom: 12px; }
     .alert-box { background: #7f1d1d; border: 1px solid #dc2626; color: #fca5a5; padding: 10px; border-radius: 8px; font-size: 0.82rem; margin-bottom: 10px; display: none; }
-    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
-    .thumb-box { position: relative; width: 100%; aspect-ratio: 1/1; }
-    .preview-thumb { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 1px solid #475569; }
-    .del-badge { position: absolute; top: 4px; right: 4px; background: rgba(220, 38, 38, 0.9); color: #fff; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; cursor: pointer; }
-  /* 回転スピナー */
-    .spinner {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      border: 2px solid rgba(255, 255, 255, 0.3);
-      border-radius: 50%;
-      border-top-color: #fff;
-      animation: spin 0.8s linear infinite;
-      vertical-align: middle;
-      margin-right: 8px;
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
+    .toast { background: #ea580c; color: #fff; padding: 12px; border-radius: 8px; text-align: center; font-weight: bold; margin-bottom: 12px; display: none; }
+
+    /* 画像スワイプ拡大モーダル */
+    #imageModal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); justify-content: center; align-items: center; }
+    #modalImg { max-width: 92%; max-height: 80%; object-fit: contain; border-radius: 8px; }
+    .modal-arrow { position: absolute; top: 50%; transform: translateY(-50%); font-size: 2rem; color: #fff; background: rgba(0,0,0,0.5); border: none; padding: 10px; cursor: pointer; border-radius: 50%; }
+    .modal-close { position: absolute; top: 20px; right: 20px; font-size: 1.8rem; color: #fff; cursor: pointer; }
   </style>
-  <!-- Google Identity Services -->
-  <script src="https://accounts.google.com/gsi/client" async defer>
-  </script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
+  <div class="app-container">
 
-<div class="app-container">
-  <!-- 設定変更画面 -->
-  <div id="settingsCard" class="card" style="display: none;">
-    <div class="title">🤝 相棒とあなたの呼び名</div>
-    <div class="desc">いつでも後から変更できます。</div>
+    <!-- 設定画面モーダル -->
+    <div id="settingsCard" class="card" style="display: none;">
+      <div class="title">🤝 専属アシスタントとあなたの設定</div>
+      <div class="desc">いつでも変更できます。</div>
 
-    <label>AIの名前</label>
-    <input type="text" id="aiNameInput" placeholder="例：相棒, メシ友" value="相棒">
-    <div class="chip-wrap">
-      <span class="chip" onclick="setAiName('相棒')">相棒</span>
-      <span class="chip" onclick="setAiName('メシ友')">メシ友</span>
-      <span class="chip" onclick="setAiName('めしログ君')">めしログ君</span>
-      <span class="chip" onclick="setAiName('バディ')">バディ</span>
-    </div>
-
-    <label>あなたの呼ばれ方</label>
-    <input type="text" id="userCallInput" placeholder="例：ボス, 隊長" value="ボス">
-    <div class="chip-wrap">
-      <span class="chip" onclick="setCall('ボス')">ボス</span>
-      <span class="chip" onclick="setCall('隊長')">隊長</span>
-      <span class="chip" onclick="setCall('アニキ')">アニキ</span>
-      <span class="chip" onclick="setCall('マスター')">マスター</span>
-    </div>
-
-   <button class="btn-main" onclick="saveRelationship()">設定を保存する</button>
-    <hr style="border: 0; border-top: 1px solid #334155; margin: 16px 0;">
-      <label>Googleアカウント連携（機種変・バックアップ用）</label>
-      <div id="g_id_onload"
-           data-client_id="205404926022-klv61q0j87hs3hkb9f6ijncbr7jnqukf.apps.googleusercontent.com"
-           data-callback="handleGoogleLogin"
-           data-auto_prompt="false">
+      <label>あなたの呼ばれ方（必須）</label>
+      <input type="text" id="userCallInput" placeholder="例：ボス, ニックネーム" value="ニックネーム">
+      <div class="chip-wrap">
+        <span class="chip" onclick="setCall('ニックネーム')">ニックネーム</span>
+        <span class="chip" onclick="setCall('ボス')">ボス</span>
+        <span class="chip" onclick="setCall('マスター')">マスター</span>
+        <span class="chip" onclick="setCall('大将')">大将</span>
       </div>
-      <div class="g_id_signin" data-type="standard" data-shape="rectangular" data-theme="outline" data-text="signin_with" data-size="large" data-logo_alignment="left"></div>
+
+      <label>AIの名前</label>
+      <input type="text" id="aiNameInput" placeholder="例：ログアシスタント, 相棒" value="ログアシスタント">
+      <div class="chip-wrap">
+        <span class="chip" onclick="setAiName('ログアシスタント')">ログアシスタント</span>
+        <span class="chip" onclick="setAiName('相棒')">相棒</span>
+        <span class="chip" onclick="setAiName('バディ')">バディ</span>
+      </div>
+
+      <label>お決まりフレーズ（口癖）</label>
+      <input type="text" id="myPhraseInput" placeholder="例：リピ確定！, 優勝！" value="リピ確定！">
+      <div class="chip-wrap">
+        <span class="chip" onclick="setPhrase('リピ確定！')">リピ確定！</span>
+        <span class="chip" onclick="setPhrase('優勝！')">優勝！</span>
+        <span class="chip" onclick="setPhrase('今日も今日とて')">今日も今日とて</span>
+      </div>
+
+      <hr style="border: 0; border-top: 1px solid #334155; margin: 16px 0;">
+      <div class="title" style="font-size: 1rem;">🚀 外部連携・バックアップ母艦</div>
+      
+      <label>Discord Webhook URL（無期限・無料アルバム母艦）</label>
+      <input type="text" id="discordInput" placeholder="https://discord.com/api/webhooks/...">
+
+      <label>LINE 連携（ID / Notify）</label>
+      <input type="text" id="lineInput" placeholder="LINE ID または Token">
+
+      <button class="btn-main" onclick="saveSettings()">設定を保存する</button>
+
+      <hr style="border: 0; border-top: 1px solid #334155; margin: 16px 0;">
+      <label>Google連携（機種変・引き継ぎ用）</label>
+      <div id="g_id_onload" data-client_id="205404926022-klv61q0j87hs3hkb9f6ijncbr7jnqukf.apps.googleusercontent.com" data-callback="handleGoogleLogin" data-auto_prompt="false"></div>
+      <div class="g_id_signin" data-type="standard" data-shape="rectangular" data-theme="outline" data-size="large"></div>
       <div id="googleAuthStatus" style="font-size: 0.8rem; color: #94a3b8; margin-top: 8px;">未連携</div>
-    <button class="btn-sub" onclick="skipSettings()">閉じる</button>
-  </div>
 
-  <!-- 過去ログ一覧モーダル -->
-  <div id="historyModal" class="card" style="display: none;">
-    <div class="header-bar">
-      <div class="title" style="margin-bottom: 0;">📖 保存されたメシログ</div>
-      <button class="btn-gear" onclick="closeHistory()">✕ 閉じる</button>
+      <button class="btn-sub" onclick="closeSettings()">閉じる</button>
     </div>
-    <div id="historyList" style="margin-top: 12px; display: flex; flex-direction: column; gap: 12px; max-height: 60vh; overflow-y: auto;">
-      <!-- ここにD1のログが並びます -->
-    </div>
-  </div>
 
-<!-- メイン操作画面 -->
-  <div id="mainCard" class="card">
-    <div style="margin-bottom: 12px;">
-      <div class="title" style="margin-bottom: 8px; font-size: 1.15rem; white-space: nowrap;">🍽️ めしログ＆ライフログ</div>
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span id="headerAiTitle" style="font-size: 0.85rem; font-weight: bold; color: #94a3b8;">専属AI: 相棒</span>
+    <!-- 過去ログモーダル -->
+    <div id="historyModal" class="card" style="display: none;">
+      <div class="header-bar">
+        <div class="title" style="margin-bottom: 0;">📖 保存されたログ一覧</div>
+        <button class="btn-gear" onclick="closeHistory()">✕ 閉じる</button>
+      </div>
+      <div id="historyList" style="margin-top: 12px; display: flex; flex-direction: column; gap: 12px; max-height: 60vh; overflow-y: auto;">
+        <!-- D1ログ差し込み枠 -->
+      </div>
+    </div>
+
+    <!-- メイン操作画面 -->
+    <div id="mainCard" class="card">
+      <div class="header-bar">
+        <div>
+          <div class="title">🍽️ めしログ＆ライフログ</div>
+          <span id="headerAiTitle" style="font-size: 0.82rem; font-weight: bold; color: #94a3b8;">アシスタント: ログアシスタント</span>
+        </div>
         <div style="display: flex; gap: 6px;">
           <button class="btn-gear" onclick="loadMealHistory()">📖 過去ログ</button>
           <button class="btn-gear" onclick="openSettings()">⚙️ 設定</button>
         </div>
       </div>
-    </div>
 
-    <div id="aiVoiceBubble" class="bubble"></div>
+      <!-- モード切り替えタブ -->
+      <div class="mode-switch">
+        <button id="btnModeBasic" class="mode-btn active" onclick="switchMode('basic')">⚡ おまかせ（爆速）</button>
+        <button id="btnModePro" class="mode-btn" onclick="switchMode('pro')">⚙️ こだわり（PRO）</button>
+      </div>
 
-    <!-- 気分選択チップ -->
-    <label>今日の気分（任意）</label>
-    <div class="chip-wrap" id="moodChips">
-      <span class="chip active" onclick="selectMood(this, '最高')">😋 最高</span>
-      <span class="chip" onclick="selectMood(this, 'ガッツリ')">💪 ガッツリ</span>
-      <span class="chip" onclick="selectMood(this, 'ヘルシー')">🥗 ヘルシー</span>
-      <span class="chip" onclick="selectMood(this, 'サクッと')">⚡ サクッと</span>
-      <span class="chip" onclick="selectMood(this, 'ご褒美')">✨ ご褒美</span>
-    </div>
+      <!-- トースト通知枠 -->
+      <div id="toastBox" class="toast"></div>
 
-    <!-- ポストの長さ切り替え -->
-    <label>X投稿の文字量</label>
-    <div class="chip-wrap" id="lengthChips">
-      <span class="chip active" onclick="selectLength(this, 'short')">短文（80字前後）</span>
-      <span class="chip" onclick="selectLength(this, 'long')">長文（200字詳細）</span>
-    </div>
+      <!-- プライバシー警告枠 -->
+      <div id="alertBox" class="alert-box"></div>
 
-   <input type="file" id="fileInput" multiple accept="image/*" onchange="handleImages(event)">
-    <button class="btn-main" onclick="document.getElementById('fileInput').click()">📷 写真を撮る / 選ぶ（最大6枚）</button>
+      <!-- 6枚写真選択エリア（初期グリッドデザイン） -->
+      <div class="photo-grid-box">
+        <input type="file" id="fileInput" accept="image/*" multiple style="display: none;" onchange="handleFileSelect(event)">
+        <div style="font-size: 0.85rem; color: #cbd5e1; margin-bottom: 6px;">📸 写真を選択（最大6枚）</div>
+        <div id="photoGrid" class="photo-grid">
+          <!-- 選択したサムネイルと「＋」枠がここに並びます -->
+        </div>
+      </div>
 
-    <div id="previewGrid" class="grid"></div>
-    <div id="safetyAlert" class="alert-box"></div>
+      <!-- 【おまかせモード用】1秒保存ボタン -->
+      <div id="basicActionArea">
+        <button id="btnQuickUpload" class="btn-main" onclick="uploadQuick()" disabled>⚡ 預ける（1秒で完了）</button>
+      </div>
 
-    <button id="btnAnalyze" class="btn-main" style="display: none; background: #059669;" onclick="analyzeImages()">🔍 この写真で解析する</button>
+      <!-- 【こだわりPROモード用】カスタム生成エリア -->
+      <div id="proActionArea" style="display: none;">
+        <label>文体・トーン</label>
+        <div class="chip-wrap" id="toneChips">
+          <span class="chip active" onclick="setTone(this, 'いつもの相棒')">いつもの相棒</span>
+          <span class="chip" onclick="setTone(this, 'グルメ評論家')">グルメ評論家</span>
+          <span class="chip" onclick="setTone(this, '辛口ツッコミ')">辛口ツッコミ</span>
+        </div>
+        <button id="btnProGenerate" class="btn-main" onclick="generatePro()" disabled>✨ じっくり生成してプレビュー</button>
+      </div>
 
-    <!-- 結果エリア -->
-    <div id="resultSection" style="display: none; margin-top: 14px;">
-      <label>📱 X用ポスト文（修正するとAIが好みを学習）</label>
-      <textarea id="xPostText" rows="4" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #fff; padding: 10px; border-radius: 8px; font-size: 0.9rem; margin-bottom: 8px;"></textarea>
+      <!-- 解析結果・Xシェア表示枠 -->
+      <div id="resultArea" style="margin-top: 14px; display: none;">
+        <div class="bubble" id="aiComment"></div>
+        <textarea id="xText" style="width: 100%; height: 80px; background: #0f172a; color: #fff; border: 1px solid #475569; border-radius: 8px; padding: 8px; font-size: 0.88rem;"></textarea>
+        <a id="btnXShare" class="btn-x" href="#" target="_blank">
+          <span>𝕏 にシェアする（下書き作成）</span>
+        </a>
+      </div>
 
-      <a id="xShareBtn" class="btn-x" href="#" target="_blank">𝕏 でポストする</a>
-      <button id="btnSaveCloud" class="btn-main" style="background: #2563eb;" onclick="saveToCloudAndDiscord()">💾 クラウド＆Discordに記録してリセット</button>
-    </div>
-  </div>
-</div>
-
- <!-- 写真拡大プレビュー用モーダル（スワイプ・前後移動対応） -->
-  <div id="imageModal" style="display:none; position:fixed; z-index:99999; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.92); align-items:center; justify-content:center; touch-action: pan-y;" onclick="closeImageModal(event)">
-    <div style="position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center;">
-      <!-- 前へボタン -->
-      <button id="modalPrevBtn" onclick="event.stopPropagation(); showPrevImage();" style="position:absolute; left:12px; background:rgba(0,0,0,0.5); color:#fff; border:none; font-size:24px; border-radius:50%; width:44px; height:44px; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:2;">‹</button>
-      
-      <!-- 写真本体 -->
-      <img id="imageModalImg" style="max-width:95vw; max-height:85vh; object-fit:contain; border-radius:8px; user-select:none; pointer-events:auto;" onclick="event.stopPropagation()">
-      
-      <!-- 次へボタン -->
-      <button id="modalNextBtn" onclick="event.stopPropagation(); showNextImage();" style="position:absolute; right:12px; background:rgba(0,0,0,0.5); color:#fff; border:none; font-size:24px; border-radius:50%; width:44px; height:44px; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:2;">›</button>
-
-      <!-- 枚数インジケーター（例: 2 / 5） -->
-      <div id="modalCounter" style="position:absolute; bottom:20px; color:#cbd5e1; font-size:14px; background:rgba(0,0,0,0.6); padding:4px 12px; border-radius:12px;"></div>
-
-      <!-- 閉じるボタン -->
-      <div onclick="closeImageModal()" style="position:absolute; top:20px; right:20px; color:#fff; font-size:28px; font-weight:bold; cursor:pointer; z-index:3;">✕</div>
     </div>
   </div>
-  <script src="app.js?v=3"></script>
+
+  <!-- 画像拡大スワイプモーダル -->
+  <div id="imageModal" onclick="closeImageModal()">
+    <span class="modal-close">&times;</span>
+    <button class="modal-arrow" style="left: 10px;" onclick="prevImage(event)">&#8249;</button>
+    <img id="modalImg" src="">
+    <button class="modal-arrow" style="right: 10px;" onclick="nextImage(event)">&#8250;</button>
+  </div>
+
+  <!-- スクリプト読み込み（キャッシュ対策 v=4） -->
+  <script src="app.js?v=4"></script>
 </body>
 </html>
