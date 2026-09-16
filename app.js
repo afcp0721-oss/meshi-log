@@ -152,8 +152,11 @@ function removeImage(idx) {
 async function uploadQuick() {
   if (!imagesData.length) return;
   const btn = document.getElementById("btnQuickUpload");
+  const spin = document.getElementById("spinBasic");
+  const text = document.getElementById("textBasic");
   btn.disabled = true;
-  btn.innerText = "⚡ 預かり中…";
+  if (spin) spin.style.display = "inline-block";
+  if (text) text.innerText = "預かり中…";
 
   try {
     const res = await fetch(`${RELAY_SERVER_URL}/api/meals/upload`, {
@@ -175,9 +178,10 @@ async function uploadQuick() {
 
   } catch (err) {
     alert("エラー: " + err.message);
-  } finally {
+  finally {
     btn.disabled = false;
-    btn.innerText = "⚡ 預ける（1秒で完了）";
+    if (spin) spin.style.display = "none";
+    if (text) text.innerText = "⚡ 預ける（1秒で完了）";
   }
 }
 
@@ -249,9 +253,10 @@ async function generatePro() {
     } catch (err) {
       alert("生成エラー: " + err.message);
     }
- finally {
+finally {
     btn.disabled = false;
-    btn.innerText = "✨ じっくり生成してプレビュー";
+    if (spin) spin.style.display = "none";
+    if (text) text.innerText = "✨ じっくり生成してプレビュー";
   }
 }
 
