@@ -181,13 +181,14 @@ async function uploadQuick() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "送信に失敗しました");
 
-      // 1秒で預かり完了！即リセットして終了
+   // 1.2秒だけしっかり「預かり中…」のスピナーを見せる演出
+      await new Promise(resolve => setTimeout(resolve, 1200));
+
       showToast("⚡ 預かりました！裏側で相棒が解析・記録中です👍");
       
       // 入力枠と写真のリセット
       imagesData = [];
-      const previewArea = document.getElementById("photoPreviewArea");
-      if (previewArea) previewArea.innerHTML = "";
+      renderGrid();
       const memoInput = document.getElementById("shortMemoInput");
       if (memoInput) memoInput.value = "";
 
