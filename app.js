@@ -383,13 +383,20 @@ async function loadMealHistory() {
     list.innerHTML = "";
     data.results.forEach(item => {
       const card = document.createElement("div");
-      card.style.cssText = "background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px;";
-      let imgTag = item.photo_thumb ? `<img src="${item.photo_thumb}" style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; margin-bottom: 8px;">` : "";
+      card.style.cssText = "background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 12px;";
+      let imgTag = item.photo_thumb ? `<img src="${item.photo_thumb}" style="width: 100%; max-height: 220px; object-fit: cover; border-radius: 6px; margin-bottom: 10px;">` : "";
+      let memoTag = item.short_memo ? `<div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 6px;">✍️ メモ: ${item.short_memo}</div>` : "";
+      
       card.innerHTML = `
         ${imgTag}
-        <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 6px;">${item.created_at}</div>
-        <div style="font-size: 0.85rem; color: #6ee7b7; margin-bottom: 8px; font-weight: bold;">💬 ${item.ai_comment || "記録完了"}</div>
-        <div style="font-size: 0.82rem; color: #e2e8f0; white-space: pre-wrap; background: #1e293b; padding: 8px; border-radius: 6px;">${item.x_post_text || ""}</div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #64748b; margin-bottom: 6px;">
+          <span>${item.created_at}</span>
+          <span style="color: #f97316; font-weight: bold;">#${item.category_minor || "life"}</span>
+        </div>
+        ${memoTag}
+        <div style="font-size: 0.9rem; color: #f8fafc; line-height: 1.5; background: #1e293b; padding: 10px; border-radius: 6px; border-left: 3px solid #f97316;">
+          ${item.ai_comment || "記録完了"}
+        </div>
       `;
       list.appendChild(card);
     });
