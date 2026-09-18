@@ -164,11 +164,11 @@ async function uploadQuick() {
       images: imagesData,
       shortMemo: shortMemo,
       userId: userId || "yamamoto_boss",
-      discordWebhookUrl: localStorage.getItem("discord_webhook") || "",
-      lineToken: localStorage.getItem("line_token") || "",
-      lineUserId: localStorage.getItem("line_user_id") || "",
-      aiName: localStorage.getItem("ai_name") || "相棒",
-      callName: localStorage.getItem("call_name") || "ボス"
+      discordWebhookUrl: localStorage.getItem("meshi_discord_webhook") || discordWebhook || "",
+      lineToken: localStorage.getItem("meshi_line_token") || "",
+      lineUserId: localStorage.getItem("meshi_line_id") || lineId || "",
+      aiName: localStorage.getItem("meshi_ai_name") || aiName || "ララ",
+      callName: localStorage.getItem("meshi_user_call") || userCall || "ボス"
     };
 
     try {
