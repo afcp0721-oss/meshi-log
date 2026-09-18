@@ -375,7 +375,7 @@ async function loadMealHistory() {
   list.innerHTML = '<div style="color: #94a3b8; font-size: 0.85rem; text-align: center;">読み込み中…</div>';
 
   try {
-    const res = await fetch(`${RELAY_SERVER_URL}/api/logs?userId=${userId}`);
+   const res = await fetch(`${RELAY_SERVER_URL}/api/logs?t=${Date.now()}`);
     const data = await res.json();
     if (!data.results || data.results.length === 0) {
       list.innerHTML = '<div style="color: #94a3b8; font-size: 0.85rem; text-align: center;">まだ記録がありません。</div>';
@@ -402,8 +402,9 @@ async function loadMealHistory() {
       list.appendChild(card);
     });
   } catch (err) {
-    list.innerHTML = '<div style="color: #f87171; font-size: 0.85rem; text-align: center;">ログ取得に失敗しました。</div>';
-  }
+  console.error(err);
+  list.innerHTML = `<div style="color: #f87171; font-size: 0.85rem; text-align: center;">ログ取得エラー: ${err.message}</div>`;
+}
 }
 
 function closeHistory() {
