@@ -221,48 +221,47 @@ async function pollMealResult(mealId) {
 // --------------------------------------------------
 // 機能5: 【PROモード】リアルタイムGemini生成
 // --------------------------------------------------
-async function generatePro() {
-  if (!imagesData.length) return;
-  const btn = document.getElementById("btnProGenerate");
-  const spin = document.getElementById("spinPro");
-  const text = document.getElementById("textPro");
-  btn.disabled = true;
-  if (spin) spin.style.display = "inline-block";
-  if (text) text.innerText = "生成中…";
+async function callGemini(apiKey, modelName, prompt, images) {
+  try {
+    const parts = [{ text: prompt }];
 
-  const promptText = `
-あなたは${userCall}専属の「${aiName}」です。トーン: ${selectedTone}。
-画像（${imagesData.length}枚）を解析し、以下のJSON形式で回答してください。
-- aiComment: ${userCall}に寄り添う親身なツッコミ（30〜60文字）。
-- xPostText: X投稿用短文（口癖「${myPhrase}」を入れ、ハッシュタグ付き）。
-- privacyWarning: 個人情報や顔写り込みがある場合は true、なければ false。
-`;
-
-  const parts = [{ text: promptText }];
-  imagesData.forEach(img => {
-    parts.push({
-      inline_data: {
-        mime_type: "image/jpeg",
-        data: img.replace(/^data:image\/\w+;base64,/, "")
-      }
-    });
-  });
-
- try {
-      const res = await fetch(`${RELAY_SERVER_URL}/api/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts }] })
+    if (images && images.length > 0) {
+      const b64 = images[0].split(",")[1] || images[0];
+      parts.push({
+        inlineData: {
+          mimeType: "image/jpeg",
+          data: b64
+        }
       });
-      const data = await res.json();
+    }
 
-      // エラーの詳細をそのままアラートに表示するガード
-      if (!res.ok || data.error) {
-        throw new Error(data.error?.message || JSON.stringify(data));
-      }
-      if (!data.candidates || !data.candidates[0]) {
-        throw new Error("Geminiから回答が取得できませんでした: " + JSON.stringify(data));
-      }
+    const payload = {
+      contents: [{ role: "user", parts: parts }],
+      generationConfig: { responseMimeType: "application/json" }
+    };
+
+    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + modelName + ":generateContent?key=" + apiKey, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    let text = "{}";
+    if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
+      text = data.candidates[0].content.parts[0].text || "{}";
+    }
+    text = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      return { post_text: text };
+    }
+  } catch (err) {
+    console.error("callGemini Error:", err);
+    return { post_text: "記録完了！" };
+  }
+}
 
       let rawText = data.candidates[0].content.parts[0].text;
       rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
