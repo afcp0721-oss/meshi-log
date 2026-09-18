@@ -156,33 +156,48 @@ async function uploadQuick() {
   const text = document.getElementById("textBasic");
   btn.disabled = true;
   if (spin) spin.style.display = "inline-block";
-  if (text) text.innerText = "預かり中…";
+    if (text) text.innerText = "預かり中…";
 
-  try {
-    const res = await fetch(`${RELAY_SERVER_URL}/api/meals/upload`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId,
-        images: imagesData,
-        photoThumb: imagesData[0]
-      })
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || "保存に失敗しました");
+    // ちょい足しメモと各種設定を取得
+    const shortMemo = document.getElementById("shortMemoInput") ? document.getElementById("shortMemoInput").value : "";
+    const payload = {
+      images: imagesData,
+      shortMemo: shortMemo,
+      userId: userId || "yamamoto_boss",
+      discordWebhookUrl: localStorage.getItem("discord_webhook") || "",
+      lineToken: localStorage.getItem("line_token") || "",
+      lineUserId: localStorage.getItem("line_user_id") || "",
+      aiName: localStorage.getItem("ai_name") || "相棒",
+      callName: localStorage.getItem("call_name") || "ボス"
+    };
 
-    showToast("⚡ ログアシスタントが預かりました！解析は裏側で進めます。");
+    try {
+      const res = await fetch(RELAY_SERVER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "送信に失敗しました");
 
-    // X下書き用ポーリング（裏側の解析が終わるのを待ってXリンクを出す）
-    pollMealResult(data.mealId);
+      // 1秒で預かり完了！即リセットして終了
+      showToast("⚡ 預かりました！裏側で相棒が解析・記録中です👍");
+      
+      // 入力枠と写真のリセット
+      imagesData = [];
+      const previewArea = document.getElementById("photoPreviewArea");
+      if (previewArea) previewArea.innerHTML = "";
+      const memoInput = document.getElementById("shortMemoInput");
+      if (memoInput) memoInput.value = "";
 
-  } catch (err) {
-    alert("エラー: " + err.message);
-  }finally {
-    btn.disabled = false;
-    if (spin) spin.style.display = "none";
-    if (text) text.innerText = "⚡ 預ける（1秒で完了）";
-  }
+    } catch (err) {
+      alert("エラー: " + err.message);
+    } finally {
+      btn.disabled = false;
+      if (spin) spin.style.display = "none";
+      if (text) text.innerText = "⚡ 預ける（1秒で完了）";
+    }
 }
 
 // 非同期解析完了待ち
