@@ -36,6 +36,9 @@ jobs:
             [worker.includes('WHERE user_id = ?'), 'history/context are user-scoped'],
             [!worker.includes('/api/generate'), 'no public Gemini proxy'],
             [worker.includes('env.DISCORD_WEBHOOK_URL'), 'Discord webhook stays server-side'],
+            [worker.includes('url.pathname === "/api/image"'), 'Worker image proxy route exists'],
+            [worker.includes('cdn.discordapp.com') && worker.includes('media.discordapp.net'), 'image proxy is restricted to Discord CDN'],
+            [app.includes('/api/image?url='), 'history uses Worker image proxy'],
             [wrangler.includes('"binding": "DB"') && wrangler.includes('"database_name": "meshi-log-db"'), 'D1 binding present']
           ];
           let failed = false;
