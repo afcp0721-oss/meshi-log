@@ -92,7 +92,6 @@
       to { transform: rotate(360deg); }
     }
   </style>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <div class="app-container">
@@ -133,12 +132,6 @@
       <input type="text" id="lineInput" placeholder="LINE ID または Token">
 
       <button class="btn-main" onclick="saveSettings()">設定を保存する</button>
-
-      <hr style="border: 0; border-top: 1px solid #334155; margin: 16px 0;">
-      <label>Google連携（機種変・引き継ぎ用）</label>
-      <div id="g_id_onload" data-client_id="205404926022-klv61q0j87hs3hkb9f6ijncbr7jnqukf.apps.googleusercontent.com" data-callback="handleGoogleLogin" data-auto_prompt="false"></div>
-      <div class="g_id_signin" data-type="standard" data-shape="rectangular" data-theme="outline" data-size="large"></div>
-      <div id="googleAuthStatus" style="font-size: 0.8rem; color: #94a3b8; margin-top: 8px;">未連携</div>
 
       <button class="btn-sub" onclick="closeSettings()">閉じる</button>
     </div>
