@@ -27,21 +27,6 @@ export default {
       }
     }
 
-    if (request.method === "POST" && url.pathname === "/api/generate") {
-      try {
-        const body = await request.json();
-        const model = env.GEMINI_MODEL || "gemini-flash-latest";
-        const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`,
-          { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) }
-        );
-        const data = await geminiRes.json();
-        return json(data, geminiRes.status, headers);
-      } catch (err) {
-        return json({ error: { message: err.message } }, 500, headers);
-      }
-    }
-
     if (request.method === "POST" && url.pathname === "/") {
       try {
         const payload = await request.json();
