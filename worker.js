@@ -1,501 +1,227 @@
+const JSON_HEADERS = { "Content-Type": "application/json" };
+
 export default {
-
   async fetch(request, env, ctx) {
-
     const url = new URL(request.url);
-
-    const MODEL = env.GEMINI_MODEL || "gemini-flash-latest";
-
-
-
-    const corsHeaders = {
-
+    const cors = {
       "Access-Control-Allow-Origin": "*",
-
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-
       "Access-Control-Allow-Headers": "Content-Type"
-
     };
+    const headers = { ...cors, ...JSON_HEADERS };
 
-
-
-    if (request.method === "OPTIONS") {
-
-      return new Response(null, { headers: corsHeaders });
-
-    }
-
-
+    if (request.method === "OPTIONS") return new Response(null, { headers: cors });
 
     if (request.method === "GET" && url.pathname === "/api/logs") {
-
       try {
+        const userId = (url.searchParams.get("userId") || "").trim();
+        if (!userId) return json({ error: "userId is required", results: [] }, 400, headers);
 
         const { results } = await env.DB.prepare(
-
-          "SELECT record_id, post_text AS ai_comment, discord_image_url AS photo_thumb, short_memo, category_minor, created_at FROM activity_records ORDER BY created_at DESC LIMIT 30"
-
-        ).all();
-
-
-
-        return new Response(JSON.stringify({ results: results || [] }), {
-
-          headers: Object.assign({}, corsHeaders, { "Content-Type": "application/json" })
-
-        });
-
+          "SELECT record_id, post_text AS ai_comment, discord_image_url AS photo_thumb, short_memo, category_minor, created_at FROM activity_records WHERE user_id = ? ORDER BY created_at DESC LIMIT 30"
+        ).bind(userId).all();
+        return json({ results: results || [] }, 200, headers);
       } catch (err) {
-
-        return new Response(JSON.stringify({ error: err.message, results: [] }), {
-
-          status: 500,
-
-          headers: Object.assign({}, corsHeaders, { "Content-Type": "application/json" })
-
-        });
-
+        console.error("D1 Read Error:", err);
+        return json({ error: "ログを取得できませんでした", results: [] }, 500, headers);
       }
-
     }
-
-
 
     if (request.method === "POST" && url.pathname === "/api/generate") {
-
       try {
-
         const body = await request.json();
-
+        const model = env.GEMINI_MODEL || "gemini-flash-latest";
         const geminiRes = await fetch(
-
-          "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent?key=" + env.GEMINI_API_KEY,
-
-          {
-
-            method: "POST",
-
-            headers: { "Content-Type": "application/json" },
-
-            body: JSON.stringify(body)
-
-          }
-
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`,
+          { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) }
         );
-
         const data = await geminiRes.json();
-
-        return new Response(JSON.stringify(data), {
-
-          headers: Object.assign({}, corsHeaders, { "Content-Type": "application/json" })
-
-        });
-
+        return json(data, geminiRes.status, headers);
       } catch (err) {
-
-        return new Response(JSON.stringify({ error: { message: err.message } }), {
-
-          status: 500,
-
-          headers: Object.assign({}, corsHeaders, { "Content-Type": "application/json" })
-
-        });
-
+        return json({ error: { message: err.message } }, 500, headers);
       }
-
     }
 
-
-
-    if (request.method === "POST") {
-
+    if (request.method === "POST" && url.pathname === "/") {
       try {
-
         const payload = await request.json();
+        const images = Array.isArray(payload.images) ? payload.images : [];
+        if (images.length < 1 || images.length > 3) {
+          return json({ error: "写真は1〜3枚で預けてください" }, 400, headers);
+        }
+        if (images.some(x => typeof x !== "string" || !/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(x))) {
+          return json({ error: "対応していない画像形式です" }, 400, headers);
+        }
+        const clean = {
+          ...payload,
+          userId: String(payload.userId || "").slice(0, 100),
+          shortMemo: String(payload.shortMemo || "").slice(0, 500),
+          aiName: String(payload.aiName || "ララ").slice(0, 50),
+          callName: String(payload.callName || "あなた").slice(0, 50),
+          tone: String(payload.tone || "いつもの相棒").slice(0, 50),
+          mood: String(payload.mood || "").slice(0, 100),
+          images
+        };
+        if (!clean.userId) return json({ error: "userId is required" }, 400, headers);
 
-        ctx.waitUntil(handleBackgroundJob(payload, env, MODEL));
-
-
-
-        return new Response(JSON.stringify({ status: "accepted", message: "預かりました！裏で処理中..." }), {
-
-          headers: Object.assign({}, corsHeaders, { "Content-Type": "application/json" })
-
-        });
-
-      } catch (e) {
-
-        return new Response(JSON.stringify({ error: e.message }), {
-
-          status: 500,
-
-          headers: Object.assign({}, corsHeaders, { "Content-Type": "application/json" })
-
-        });
-
+        ctx.waitUntil(handleBackgroundJob(clean, env));
+        return json({ status: "accepted", message: "預かりました" }, 202, headers);
+      } catch (err) {
+        return json({ error: err.message || "Invalid request" }, 400, headers);
       }
-
     }
 
-
-
-    return new Response("Not Found", { status: 404, headers: corsHeaders });
-
+    return new Response("Not Found", { status: 404, headers: cors });
   }
-
 };
 
+function json(data, status, headers) {
+  return new Response(JSON.stringify(data), { status, headers });
+}
 
+async function handleBackgroundJob(payload, env) {
+  const model = env.GEMINI_MODEL || "gemini-flash-latest";
+  const webhook = env.DISCORD_WEBHOOK_URL || "";
+  let imageUrls = [];
 
-async function handleBackgroundJob(payload, env, modelName) {
-
-  const images = payload.images;
-
-  const shortMemo = payload.shortMemo || "";
-
-  const userId = payload.userId || "yamamoto_boss";
-
-  const discordWebhookUrl = payload.discordWebhookUrl;
-
-  const lineToken = payload.lineToken;
-
-  const lineUserId = payload.lineUserId;
-
-  const aiName = payload.aiName || "ララ";
-
-  const callName = payload.callName || "ボス";
-
-
-
-  let discordImageUrl = null;
-
-  if (discordWebhookUrl && images && images.length > 0) {
-
-    discordImageUrl = await uploadToDiscord(discordWebhookUrl, images[0]);
-
+  if (webhook) {
+    for (const image of payload.images) {
+      const url = await uploadToDiscord(webhook, image);
+      if (url) imageUrls.push(url);
+    }
   }
-
-
 
   let recentContext = "";
-
   try {
-
     const { results } = await env.DB.prepare(
-
-      "SELECT post_text, category_minor, created_at FROM activity_records ORDER BY created_at DESC LIMIT 3"
-
-    ).all();
-
-    if (results && results.length > 0) {
-
-      recentContext = "【直近の記録】: \n" + results.map(function(r) { return "- " + r.category_minor + ": " + r.post_text; }).join("\n");
-
+      "SELECT post_text, category_minor, created_at FROM activity_records WHERE user_id = ? ORDER BY created_at DESC LIMIT 5"
+    ).bind(payload.userId).all();
+    if (results?.length) {
+      recentContext = "【このユーザーの直近の記録】\n" +
+        results.map(r => `- ${r.category_minor || "other"}: ${r.post_text || ""}`).join("\n");
     }
-
   } catch (err) {
-
-    console.error("D1 Read Error:", err);
-
+    console.error("D1 recent context error:", err);
   }
 
+  const prompt = `
+あなたは${payload.callName}の気さくで率直な専属AI「${payload.aiName}」です。
+白々しいお世辞、定型ポエム、過剰な美化は避け、写真日記として自然な1〜3文で返してください。
+複数写真は同じ1回の出来事としてまとめて理解してください。
+画像やメモから確認できない店名・商品名・人物名・場所などの固有名詞を推測・創作してはいけません。不明なら不明のまま扱ってください。
+トーン: ${payload.tone}
+気分: ${payload.mood || "指定なし"}
+ちょい足しメモ: ${payload.shortMemo || "なし"}
+${recentContext}
 
+次のJSONだけを返してください:
+{
+  "post_text": "写真日記コメント",
+  "category_major": "food | life | scene",
+  "category_minor": "ramen | meat | cafe | work_site | driving | hobby | other",
+  "location_type": "eatery | work_site | vehicle | outdoor | home | unknown",
+  "companion_type": "solo | pair | group | unknown",
+  "price_range": "under_1k | 1k_to_3k | over_3k | none",
+  "interest_tag": "noodle_craft | car_maintenance | heavy_work | sports_gear | none"
+}`;
 
-  const prompt = "\nあなたは" + callName + "の気さくで率直な専属AI「" + aiName + "」です。\n白々しいお世辞や定型ポエム、過剰な美化は厳禁。クスッと笑えるウィットあるツッコミや、リアルな共感で返してください。\n\nちょい足しメモ: \"" + (shortMemo || "なし") + "\"\n" + recentContext + "\n\n写真とメモから、以下のJSONフォーマットのみを出力してください：\n{\n  \"post_text\": \"親しみやすくウィットに富んだコメント（1〜3文程度）\",\n  \"category_major\": \"food\" | \"life\" | \"scene\",\n  \"category_minor\": \"ramen\" | \"meat\" | \"cafe\" | \"work_site\" | \"driving\" | \"hobby\" | \"other\",\n  \"location_type\": \"eatery\" | \"work_site\" | \"vehicle\" | \"outdoor\" | \"home\" | \"unknown\",\n  \"companion_type\": \"solo\" | \"pair\" | \"group\" | \"unknown\",\n  \"price_range\": \"under_1k\" | \"1k_to_3k\" | \"over_3k\" | \"none\",\n  \"interest_tag\": \"noodle_craft\" | \"car_maintenance\" | \"heavy_work\" | \"sports_gear\" | \"none\"\n}\n";
-
-
-
-  const geminiResult = await callGemini(env.GEMINI_API_KEY, modelName, prompt, images);
-
-  const commentText = geminiResult.post_text || geminiResult.aiComment || (typeof geminiResult === "string" ? geminiResult : "しっかり記録しました！");
-
-
+  const result = await callGemini(env.GEMINI_API_KEY, model, prompt, payload.images);
+  const comment = result.post_text || "記録しました。";
 
   try {
-
     await env.DB.prepare(
-
       "INSERT INTO activity_records (user_id, post_text, discord_image_url, short_memo, category_major, category_minor, location_type, companion_type, price_range, interest_tag) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-
     ).bind(
-
-      userId,
-
-      commentText,
-
-      discordImageUrl || "",
-
-      shortMemo || "",
-
-      geminiResult.category_major || "life",
-
-      geminiResult.category_minor || "other",
-
-      geminiResult.location_type || "unknown",
-
-      geminiResult.companion_type || "unknown",
-
-      geminiResult.price_range || "none",
-
-      geminiResult.interest_tag || "none"
-
+      payload.userId,
+      comment,
+      imageUrls[0] || "",
+      payload.shortMemo,
+      allowed(result.category_major, ["food","life","scene"], "life"),
+      allowed(result.category_minor, ["ramen","meat","cafe","work_site","driving","hobby","other"], "other"),
+      allowed(result.location_type, ["eatery","work_site","vehicle","outdoor","home","unknown"], "unknown"),
+      allowed(result.companion_type, ["solo","pair","group","unknown"], "unknown"),
+      allowed(result.price_range, ["under_1k","1k_to_3k","over_3k","none"], "none"),
+      allowed(result.interest_tag, ["noodle_craft","car_maintenance","heavy_work","sports_gear","none"], "none")
     ).run();
-
   } catch (err) {
-
     console.error("D1 Insert Error:", err);
-
+    throw err;
   }
 
-
-
-  if (lineToken && lineUserId) {
-
-    await sendLinePush(lineToken, lineUserId, commentText, discordImageUrl);
-
+  if (webhook) {
+    await sendDiscordText(webhook, `**[${payload.aiName}]**\n${comment}`);
   }
-
-
-
-  if (discordWebhookUrl && commentText) {
-
-    await sendDiscordText(discordWebhookUrl, "**[" + aiName + "]**\n" + commentText);
-
-  }
-
 }
 
+function allowed(value, values, fallback) {
+  return values.includes(value) ? value : fallback;
+}
 
-
-async function uploadToDiscord(webhookUrl, base64Data) {
-
+async function uploadToDiscord(webhookUrl, dataUrl) {
   try {
+    const match = dataUrl.match(/^data:(image\/(?:jpeg|jpg|png|webp));base64,(.+)$/i);
+    if (!match) return null;
+    const mime = match[1].toLowerCase().replace("jpg", "jpeg");
+    const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
+    const binary = Uint8Array.from(atob(match[2]), c => c.charCodeAt(0));
 
-    const boundary = "----WebKitFormBoundary" + Math.random().toString(36).substring(2);
-
-    const base64Content = base64Data.split(",")[1] || base64Data;
-
-    const binary = Uint8Array.from(atob(base64Content), function(c) { return c.charCodeAt(0); });
-
-
-
-    let body = "--" + boundary + "\r\n";
-
-    body += "Content-Disposition: form-data; name=\"file\"; filename=\"upload.jpg\"\r\n";
-
-    body += "Content-Type: image/jpeg\r\n\r\n";
-
-
-
-    const pre = new TextEncoder().encode(body);
-
-    const post = new TextEncoder().encode("\r\n--" + boundary + "--\r\n");
-
-    const merged = new Uint8Array(pre.length + binary.length + post.length);
-
-    merged.set(pre, 0);
-
-    merged.set(binary, pre.length);
-
-    merged.set(post, pre.length + binary.length);
-
-
-
-    const res = await fetch(webhookUrl, {
-
-      method: "POST",
-
-      headers: { "Content-Type": "multipart/form-data; boundary=" + boundary },
-
-      body: merged
-
-    });
-
-
-
-    if (res.ok) {
-
-      const data = await res.json();
-
-      if (data.attachments && data.attachments[0]) {
-
-        return data.attachments[0].url;
-
-      }
-
-    }
-
-  } catch (e) {
-
-    console.error("Discord Upload Error:", e);
-
+    const form = new FormData();
+    form.append("file", new Blob([binary], { type: mime }), `upload.${ext}`);
+    const separator = webhookUrl.includes("?") ? "&" : "?";
+    const res = await fetch(webhookUrl + separator + "wait=true", { method: "POST", body: form });
+    if (!res.ok) throw new Error(`Discord upload failed: ${res.status}`);
+    const data = await res.json();
+    return data.attachments?.[0]?.url || null;
+  } catch (err) {
+    console.error("Discord Upload Error:", err);
+    return null;
   }
-
-  return null;
-
 }
-
-
-
-async function sendLinePush(token, to, text, imageUrl) {
-
-  try {
-
-    const messages = [];
-
-    if (imageUrl) {
-
-      messages.push({
-
-        type: "image",
-
-        originalContentUrl: imageUrl,
-
-        previewImageUrl: imageUrl
-
-      });
-
-    }
-
-    messages.push({
-
-      type: "text",
-
-      text: text
-
-    });
-
-
-
-    await fetch("https://api.line.me/v2/bot/message/push", {
-
-      method: "POST",
-
-      headers: {
-
-        "Content-Type": "application/json",
-
-        Authorization: "Bearer " + token
-
-      },
-
-      body: JSON.stringify({ to: to, messages: messages })
-
-    });
-
-  } catch (e) {
-
-    console.error("LINE Push Error:", e);
-
-  }
-
-}
-
-
 
 async function sendDiscordText(webhookUrl, content) {
-
   try {
-
-    await fetch(webhookUrl, {
-
+    const res = await fetch(webhookUrl, {
       method: "POST",
-
-      headers: { "Content-Type": "application/json" },
-
-      body: JSON.stringify({ content: content })
-
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ content })
     });
-
-  } catch (e) {
-
-    console.error("Discord Text Error:", e);
-
+    if (!res.ok) console.error("Discord text failed:", res.status);
+  } catch (err) {
+    console.error("Discord Text Error:", err);
   }
-
 }
 
-
-
 async function callGemini(apiKey, modelName, prompt, images) {
+  if (!apiKey) throw new Error("GEMINI_API_KEY is missing");
+  const parts = [{ text: prompt }];
 
-  try {
-
-    const parts = [{ text: prompt }];
-
-
-
-    if (images && images.length > 0) {
-
-      const b64 = images[0].split(",")[1] || images[0];
-
-      parts.push({
-
-        inlineData: {
-
-          mimeType: "image/jpeg",
-
-          data: b64
-
-        }
-
-      });
-
-    }
-
-
-
-    const payload = {
-
-      contents: [{ role: "user", parts: parts }],
-
-      generationConfig: { responseMimeType: "application/json" }
-
-    };
-
-
-
-    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + modelName + ":generateContent?key=" + apiKey, {
-
-      method: "POST",
-
-      headers: { "Content-Type": "application/json" },
-
-      body: JSON.stringify(payload)
-
+  for (const image of images) {
+    const match = image.match(/^data:(image\/(?:jpeg|jpg|png|webp));base64,(.+)$/i);
+    if (!match) continue;
+    parts.push({
+      inlineData: {
+        mimeType: match[1].toLowerCase().replace("jpg", "jpeg"),
+        data: match[2]
+      }
     });
-
-
-
-    const data = await res.json();
-
-    let text = "{}";
-
-    if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
-
-      text = data.candidates[0].content.parts[0].text || "{}";
-
-    }
-
-    text = text.replace(/```json/gi, "").replace(/```/g, "").trim();
-
-    try {
-
-      return JSON.parse(text);
-
-    } catch (e) {
-
-      return { post_text: text };
-
-    }
-
-  } catch (err) {
-
-    console.error("callGemini Error:", err);
-
-    return { post_text: "記録完了！" };
-
   }
 
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        contents: [{ role: "user", parts }],
+        generationConfig: { responseMimeType: "application/json" }
+      })
+    }
+  );
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.message || `Gemini error: ${res.status}`);
+  let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+  text = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+  try { return JSON.parse(text); }
+  catch { return { post_text: text || "記録しました。" }; }
 }
