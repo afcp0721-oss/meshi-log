@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "icy-silence-6539",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-10",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "meshi-log-db",
+      "database_id": "27bd82e7-7b10-467d-8777-217531f45ba1"
+    }
+  ]
+}
