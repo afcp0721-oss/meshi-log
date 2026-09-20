@@ -1,0 +1,47 @@
+name: Validate Meshi Log
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check frontend JavaScript syntax
+        run: node --check app.js
+      - name: Check Worker JavaScript syntax
+        run: cp worker.js /tmp/worker.mjs && node --check /tmp/worker.mjs
+      - name: Verify product invariants
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const app = fs.readFileSync('app.js','utf8');
+          const html = fs.readFileSync('index.html','utf8');
+          const worker = fs.readFileSync('worker.js','utf8');
+          const wrangler = fs.readFileSync('wrangler.jsonc','utf8');
+          const checks = [
+            [app.includes('const MAX_PHOTOS = 3;'), 'frontend max photos is 3'],
+            [html.includes('写真を選択（最大3枚）'), 'UI says max 3'],
+            [!html.includes('1秒で完了'), 'no fake one-second promise'],
+            [worker.includes('images.length < 1 || images.length > 3'), 'Worker enforces 1-3 images'],
+            [worker.includes('WHERE user_id = ?'), 'history/context are user-scoped'],
+            [!worker.includes('/api/generate'), 'no public Gemini proxy'],
+            [worker.includes('env.DISCORD_WEBHOOK_URL'), 'Discord webhook stays server-side'],
+            [wrangler.includes('"binding": "DB"') && wrangler.includes('"database_name": "meshi-log-db"'), 'D1 binding present']
+          ];
+          let failed = false;
+          for (const [ok, label] of checks) {
+            console.log((ok ? 'PASS ' : 'FAIL ') + label);
+            if (!ok) failed = true;
+          }
+          if (failed) process.exit(1);
+          NODE

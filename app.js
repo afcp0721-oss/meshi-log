@@ -1,62 +1,39 @@
-// --------------------------------------------------
-// 機能0: 設定定数 & ローカルステート管理
-// --------------------------------------------------
 const RELAY_SERVER_URL = "https://icy-silence-6539.afcp0721.workers.dev";
+const MAX_PHOTOS = 3;
+
 let userId = localStorage.getItem("meshi_user_id");
 let aiName = localStorage.getItem("meshi_ai_name") || "ログアシスタント";
 let userCall = localStorage.getItem("meshi_user_call") || "ニックネーム";
 let myPhrase = localStorage.getItem("meshi_my_phrase") || "リピ確定！";
-let discordWebhook = localStorage.getItem("meshi_discord_webhook") || "";
-let lineId = localStorage.getItem("meshi_line_id") || "";
-
-let currentMode = "basic"; // basic or pro
 let imagesData = [];
 let selectedTone = "いつもの相棒";
+let selectedMood = "";
+let isSubmitting = false;
+let modalIndex = 0;
 
-// --------------------------------------------------
-// 機能1: 初期化 & ヘッダー反映
-// --------------------------------------------------
 window.addEventListener("DOMContentLoaded", () => {
   if (!userId) {
-    userId = "usr_" + Math.random().toString(36).substring(2, 10);
+    userId = "usr_" + cryptoRandomId();
     localStorage.setItem("meshi_user_id", userId);
   }
   updateUIHeaders();
   renderGrid();
 });
 
+function cryptoRandomId() {
+  if (globalThis.crypto?.getRandomValues) {
+    const bytes = new Uint8Array(8);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+  }
+  return Math.random().toString(36).slice(2, 12);
+}
+
 function updateUIHeaders() {
-  const headerEl = document.getElementById("headerAiTitle");
-  if (headerEl) headerEl.innerText = `ログAI: ${aiName}`;
-  const phraseChip = document.getElementById("dynamicPhraseChip");
-  if (phraseChip) {
-    phraseChip.innerText = myPhrase || "リピ確定！";
-    phraseChip.setAttribute("onclick", `toggleMood(this, '${myPhrase}')`);
-  }
-}
-
-let selectedMood = "";
-function toggleMood(el, mood) {
-  const isAlready = el.classList.contains("active");
-  document.querySelectorAll("#moodChips .chip").forEach(c => c.classList.remove("active"));
-  if (!isAlready) {
-    el.classList.add("active");
-    selectedMood = mood || el.innerText;
-  } else {
-    selectedMood = "";
-  }
-}
-
-// --------------------------------------------------
-// 機能2: モード切替（おまかせ / PRO）
-// --------------------------------------------------
-function switchMode(mode) {
-  currentMode = mode;
-  document.getElementById("btnModeBasic").classList.toggle("active", mode === "basic");
-  document.getElementById("btnModePro").classList.toggle("active", mode === "pro");
-  document.getElementById("basicActionArea").style.display = mode === "basic" ? "block" : "none";
-  document.getElementById("proActionArea").style.display = mode === "pro" ? "block" : "none";
-  document.getElementById("resultArea").style.display = "none";
+  const header = document.getElementById("headerAiTitle");
+  if (header) header.textContent = `ログAI: ${aiName}`;
+  const chip = document.getElementById("dynamicPhraseChip");
+  if (chip) chip.textContent = myPhrase || "リピ確定！";
 }
 
 function setTone(el, tone) {
@@ -65,27 +42,41 @@ function setTone(el, tone) {
   selectedTone = tone;
 }
 
-// --------------------------------------------------
-// 機能3: 写真選択 & 6枚グリッドレンダリング（初期枠復活）
-// --------------------------------------------------
+function toggleMood(el, mood) {
+  const active = el.classList.contains("active");
+  document.querySelectorAll("#moodChips .chip").forEach(c => c.classList.remove("active"));
+  selectedMood = "";
+  if (!active) {
+    el.classList.add("active");
+    selectedMood = mood || el.textContent.trim();
+  }
+}
+
 function handleFileSelect(event) {
-  const files = Array.from(event.target.files);
+  const files = Array.from(event.target.files || []);
+  event.target.value = "";
   if (!files.length) return;
 
-  const remaining = 6 - imagesData.length;
-  const targetFiles = files.slice(0, remaining);
+  const remaining = MAX_PHOTOS - imagesData.length;
+  if (remaining <= 0) return showToast("写真は1回につき最大3枚です");
 
-  let processed = 0;
-  targetFiles.forEach(file => {
+  const targets = files.slice(0, remaining);
+  let completed = 0;
+  targets.forEach(file => {
+    if (!file.type.startsWith("image/")) {
+      completed++;
+      if (completed === targets.length) renderGrid();
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = (e) => {
-      compressImage(e.target.result, (compressedUrl) => {
-        imagesData.push(compressedUrl);
-        processed++;
-        if (processed === targetFiles.length) {
-          renderGrid();
-        }
-      });
+    reader.onload = e => compressImage(e.target.result, compressed => {
+      imagesData.push(compressed);
+      completed++;
+      if (completed === targets.length) renderGrid();
+    });
+    reader.onerror = () => {
+      completed++;
+      if (completed === targets.length) renderGrid();
     };
     reader.readAsDataURL(file);
   });
@@ -97,313 +88,231 @@ function compressImage(dataUrl, callback) {
     const maxDim = 1200;
     let w = img.width, h = img.height;
     if (w > maxDim || h > maxDim) {
-      if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
-      else { w = Math.round((w * maxDim) / h); h = maxDim; }
+      const scale = maxDim / Math.max(w, h);
+      w = Math.round(w * scale);
+      h = Math.round(h * scale);
     }
     const canvas = document.createElement("canvas");
     canvas.width = w;
     canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0, w, h);
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
     callback(canvas.toDataURL("image/jpeg", 0.82));
   };
+  img.onerror = () => showToast("画像を読み込めませんでした");
   img.src = dataUrl;
 }
 
 function renderGrid() {
   const grid = document.getElementById("photoGrid");
-  grid.innerHTML = "";
+  grid.replaceChildren();
 
   imagesData.forEach((dataUrl, idx) => {
     const cell = document.createElement("div");
     cell.className = "photo-cell";
-    cell.innerHTML = `
-      <img src="${dataUrl}" onclick="openImageModal(${idx})">
-      <div class="del-btn" onclick="removeImage(${idx})">✕</div>
-    `;
+
+    const img = document.createElement("img");
+    img.src = dataUrl;
+    img.alt = `選択写真 ${idx + 1}`;
+    img.addEventListener("click", () => openImageModal(idx));
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "del-btn";
+    del.textContent = "✕";
+    del.setAttribute("aria-label", `写真${idx + 1}を削除`);
+    del.addEventListener("click", () => removeImage(idx));
+
+    cell.append(img, del);
     grid.appendChild(cell);
   });
 
-  if (imagesData.length < 6) {
-    const addCell = document.createElement("div");
-    addCell.className = "photo-cell add-cell";
-    addCell.innerHTML = `
-      <span style="font-size: 1.5rem; line-height: 1;">＋</span>
-      <span>${imagesData.length}/6</span>
-    `;
-    addCell.onclick = () => document.getElementById("fileInput").click();
-    grid.appendChild(addCell);
+  if (imagesData.length < MAX_PHOTOS) {
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "photo-cell add-cell";
+    add.innerHTML = `<span style="font-size:1.5rem;line-height:1">＋</span><span>${imagesData.length}/${MAX_PHOTOS}</span>`;
+    add.addEventListener("click", () => document.getElementById("fileInput").click());
+    grid.appendChild(add);
   }
 
-  const hasPhotos = imagesData.length > 0;
-  document.getElementById("btnQuickUpload").disabled = !hasPhotos;
-  document.getElementById("btnProGenerate").disabled = !hasPhotos;
+  const disabled = imagesData.length === 0 || isSubmitting;
+  document.getElementById("btnQuickUpload").disabled = disabled;
+  document.getElementById("btnProGenerate").disabled = disabled;
 }
 
 function removeImage(idx) {
+  if (isSubmitting) return;
   imagesData.splice(idx, 1);
   renderGrid();
   document.getElementById("resultArea").style.display = "none";
 }
 
-// --------------------------------------------------
-// 機能4: 【おまかせモード】1秒保存先行 ＆ 非同期処理
-// --------------------------------------------------
 async function uploadQuick() {
-  if (!imagesData.length) return;
-  const btn = document.getElementById("btnQuickUpload");
-  const spin = document.getElementById("spinBasic");
-  const text = document.getElementById("textBasic");
-  btn.disabled = true;
-  if (spin) spin.style.display = "inline-block";
-    if (text) text.innerText = "預かり中…";
-
-    // ちょい足しメモと各種設定を取得
-    const shortMemo = document.getElementById("shortMemoInput") ? document.getElementById("shortMemoInput").value : "";
-    const payload = {
-      images: imagesData,
-      shortMemo: shortMemo,
-      userId: userId || "yamamoto_boss",
-      discordWebhookUrl: localStorage.getItem("meshi_discord_webhook") || discordWebhook || "",
-      lineToken: localStorage.getItem("meshi_line_token") || "",
-      lineUserId: localStorage.getItem("meshi_line_id") || lineId || "",
-      aiName: localStorage.getItem("meshi_ai_name") || aiName || "ララ",
-      callName: localStorage.getItem("meshi_user_call") || userCall || "ボス"
-    };
-
-    try {
-      const res = await fetch(RELAY_SERVER_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "送信に失敗しました");
-
-   // 1.2秒だけしっかり「預かり中…」のスピナーを見せる演出
-      await new Promise(resolve => setTimeout(resolve, 1200));
-
-      showToast("⚡ 預かりました！裏側で相棒が解析・記録中です👍");
-      
-      // 入力枠と写真のリセット
-      imagesData = [];
-      renderGrid();
-      const memoInput = document.getElementById("shortMemoInput");
-      if (memoInput) memoInput.value = "";
-
-    } catch (err) {
-      alert("エラー: " + err.message);
-    } finally {
-      btn.disabled = false;
-      if (spin) spin.style.display = "none";
-      if (text) text.innerText = "⚡ 預ける（1秒で完了）";
-    }
+  if (!imagesData.length || isSubmitting) return;
+  await submitDeposit({ tone: "いつもの相棒", mood: "" }, false);
 }
 
-// 非同期解析完了待ち
-async function pollMealResult(mealId) {
-  let attempts = 0;
-  const interval = setInterval(async () => {
-    attempts++;
-    if (attempts > 15) { clearInterval(interval); return; }
-
-    const res = await fetch(`${RELAY_SERVER_URL}/api/meals/status?id=${mealId}`);
-    const record = await res.json();
-
-    if (record && record.status === "done") {
-      clearInterval(interval);
-      displayResult(record.ai_comment, record.x_post_text, record.privacy_warning);
-    }
-  }, 2000);
+async function generatePro() {
+  if (!imagesData.length || isSubmitting) return;
+  await submitDeposit({ tone: selectedTone, mood: selectedMood }, true);
 }
 
-// --------------------------------------------------
-// 機能5: 【PROモード】リアルタイムGemini生成
-// --------------------------------------------------
-async function callGemini(apiKey, modelName, prompt, images) {
+async function submitDeposit(options, showResult) {
+  isSubmitting = true;
+  renderGrid();
+  setBusy(showResult, true);
+
+  const memo = document.getElementById("shortMemoInput")?.value.trim() || "";
+  const payload = {
+    images: [...imagesData],
+    shortMemo: memo,
+    userId,
+    aiName,
+    callName: userCall,
+    tone: options.tone,
+    mood: options.mood
+  };
+
   try {
-    const parts = [{ text: prompt }];
-
-    if (images && images.length > 0) {
-      const b64 = images[0].split(",")[1] || images[0];
-      parts.push({
-        inlineData: {
-          mimeType: "image/jpeg",
-          data: b64
-        }
-      });
-    }
-
-    const payload = {
-      contents: [{ role: "user", parts: parts }],
-      generationConfig: { responseMimeType: "application/json" }
-    };
-
-    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + modelName + ":generateContent?key=" + apiKey, {
+    const res = await fetch(RELAY_SERVER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
+    const data = await safeJson(res);
+    if (!res.ok) throw new Error(data.error || `送信に失敗しました (${res.status})`);
 
-    const data = await res.json();
-    let text = "{}";
-    if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
-      text = data.candidates[0].content.parts[0].text || "{}";
-    }
-    text = text.replace(/```json/gi, "").replace(/```/g, "").trim();
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      return { post_text: text };
-    }
+    showToast(showResult
+      ? "預かりました。解析後のコメントは過去ログに反映されます。"
+      : "預かりました！ 相棒が裏側で解析・記録します。");
+
+    imagesData = [];
+    const memoInput = document.getElementById("shortMemoInput");
+    if (memoInput) memoInput.value = "";
+    document.getElementById("resultArea").style.display = "none";
   } catch (err) {
-    console.error("callGemini Error:", err);
-    return { post_text: "記録完了！" };
+    showToast("送信エラー：" + err.message, true);
+  } finally {
+    isSubmitting = false;
+    setBusy(showResult, false);
+    renderGrid();
   }
 }
 
-      let rawText = data.candidates[0].content.parts[0].text;
-      rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
-      const parsed = JSON.parse(rawText);
-
-      displayResult(parsed.aiComment, parsed.xPostText, parsed.privacyWarning);
-    } catch (err) {
-      alert("生成エラー: " + err.message);
-    }
-finally {
-    btn.disabled = false;
-    if (spin) spin.style.display = "none";
-    if (text) text.innerText = "✨ じっくり生成してプレビュー";
-  }
+function setBusy(pro, busy) {
+  const spin = document.getElementById(pro ? "spinPro" : "spinBasic");
+  const text = document.getElementById(pro ? "textPro" : "textBasic");
+  if (spin) spin.style.display = busy ? "inline-block" : "none";
+  if (text) text.textContent = busy ? "預かり中…" : (pro ? "✨ じっくり預ける" : "預ける");
 }
 
-// --------------------------------------------------
-// 機能6: 解析結果表示 & Xシェアリンク
-// --------------------------------------------------
-function displayResult(comment, postText, privacyWarning) {
-  const resultArea = document.getElementById("resultArea");
-  const commentEl = document.getElementById("aiComment");
-  const xTextEl = document.getElementById("xText");
-  const xShareBtn = document.getElementById("btnXShare");
-  const alertBox = document.getElementById("alertBox");
-
-  if (privacyWarning) {
-    alertBox.innerText = "⚠️ 個人情報や顔の写り込みが検知されました。投稿内容を確認してください。";
-    alertBox.style.display = "block";
-  } else {
-    alertBox.style.display = "none";
-  }
-
-  commentEl.innerText = comment || "記録完了！";
-  xTextEl.value = postText || "";
-
-  updateXShareLink(postText);
-  xTextEl.oninput = () => updateXShareLink(xTextEl.value);
-
-  resultArea.style.display = "block";
+async function safeJson(res) {
+  try { return await res.json(); } catch { return {}; }
 }
 
-function updateXShareLink(text) {
-  const btn = document.getElementById("btnXShare");
-  btn.href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text || "")}`;
-}
-
-function showToast(msg) {
+function showToast(msg, isError = false) {
   const box = document.getElementById("toastBox");
-  box.innerText = msg;
+  box.textContent = msg;
   box.style.display = "block";
-  setTimeout(() => { box.style.display = "none"; }, 4000);
+  box.style.background = isError ? "#b91c1c" : "#ea580c";
+  clearTimeout(showToast.timer);
+  showToast.timer = setTimeout(() => { box.style.display = "none"; }, 4500);
 }
 
-// --------------------------------------------------
-// 機能7: 設定モーダル制御 & D1保存
-// --------------------------------------------------
 function openSettings() {
   document.getElementById("userCallInput").value = userCall;
   document.getElementById("aiNameInput").value = aiName;
   document.getElementById("myPhraseInput").value = myPhrase;
-  document.getElementById("discordInput").value = discordWebhook;
-  document.getElementById("lineInput").value = lineId;
   document.getElementById("settingsCard").style.display = "block";
   document.getElementById("mainCard").style.display = "none";
 }
-
 function closeSettings() {
   document.getElementById("settingsCard").style.display = "none";
   document.getElementById("mainCard").style.display = "block";
 }
-
-function setCall(val) { document.getElementById("userCallInput").value = val; }
-function setAiName(val) { document.getElementById("aiNameInput").value = val; }
-function setPhrase(val) { document.getElementById("myPhraseInput").value = val; }
+function setCall(v) { document.getElementById("userCallInput").value = v; }
+function setAiName(v) { document.getElementById("aiNameInput").value = v; }
+function setPhrase(v) { document.getElementById("myPhraseInput").value = v; }
 
 async function saveSettings() {
   userCall = document.getElementById("userCallInput").value.trim() || "ニックネーム";
   aiName = document.getElementById("aiNameInput").value.trim() || "ログアシスタント";
   myPhrase = document.getElementById("myPhraseInput").value.trim() || "リピ確定！";
-  discordWebhook = document.getElementById("discordInput").value.trim();
-  lineId = document.getElementById("lineInput").value.trim();
 
   localStorage.setItem("meshi_user_call", userCall);
   localStorage.setItem("meshi_ai_name", aiName);
   localStorage.setItem("meshi_my_phrase", myPhrase);
-  localStorage.setItem("meshi_discord_webhook", discordWebhook);
-  localStorage.setItem("meshi_line_id", lineId);
-
   updateUIHeaders();
-
-  await fetch(`${RELAY_SERVER_URL}/api/user`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, aiName, userCall, myPhrase, discordWebhook, lineId })
-  }).catch(() => {});
-
-  alert("設定を保存しました！");
+  showToast("設定を保存しました");
   closeSettings();
 }
 
-// --------------------------------------------------
-// 機能8: 過去ログ表示
-// --------------------------------------------------
 async function loadMealHistory() {
   const modal = document.getElementById("historyModal");
   const list = document.getElementById("historyList");
   modal.style.display = "block";
   document.getElementById("mainCard").style.display = "none";
-  list.innerHTML = '<div style="color: #94a3b8; font-size: 0.85rem; text-align: center;">読み込み中…</div>';
+  list.textContent = "読み込み中…";
 
   try {
-   const res = await fetch(`${RELAY_SERVER_URL}/api/logs?t=${Date.now()}`);
-    const data = await res.json();
-    if (!data.results || data.results.length === 0) {
-      list.innerHTML = '<div style="color: #94a3b8; font-size: 0.85rem; text-align: center;">まだ記録がありません。</div>';
+    const res = await fetch(`${RELAY_SERVER_URL}/api/logs?userId=${encodeURIComponent(userId)}&t=${Date.now()}`);
+    const data = await safeJson(res);
+    if (!res.ok) throw new Error(data.error || "ログ取得に失敗しました");
+    list.replaceChildren();
+
+    if (!data.results?.length) {
+      const empty = document.createElement("div");
+      empty.textContent = "まだ記録がありません。";
+      empty.style.cssText = "color:#94a3b8;font-size:.85rem;text-align:center";
+      list.appendChild(empty);
       return;
     }
-    list.innerHTML = "";
-    data.results.forEach(item => {
-      const card = document.createElement("div");
-      card.style.cssText = "background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 12px;";
-      let imgTag = item.photo_thumb ? `<img src="${item.photo_thumb}" style="width: 100%; max-height: 220px; object-fit: cover; border-radius: 6px; margin-bottom: 10px;">` : "";
-      let memoTag = item.short_memo ? `<div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 6px;">✍️ メモ: ${item.short_memo}</div>` : "";
-      
-      card.innerHTML = `
-        ${imgTag}
-        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #64748b; margin-bottom: 6px;">
-          <span>${item.created_at}</span>
-          <span style="color: #f97316; font-weight: bold;">#${item.category_minor || "life"}</span>
-        </div>
-        ${memoTag}
-        <div style="font-size: 0.9rem; color: #f8fafc; line-height: 1.5; background: #1e293b; padding: 10px; border-radius: 6px; border-left: 3px solid #f97316;">
-          ${item.ai_comment || "記録完了"}
-        </div>
-      `;
-      list.appendChild(card);
-    });
+
+    data.results.forEach(item => list.appendChild(buildHistoryCard(item)));
   } catch (err) {
-  console.error(err);
-  list.innerHTML = `<div style="color: #f87171; font-size: 0.85rem; text-align: center;">ログ取得エラー: ${err.message}</div>`;
+    list.replaceChildren();
+    const error = document.createElement("div");
+    error.textContent = "ログ取得エラー：" + err.message;
+    error.style.cssText = "color:#f87171;font-size:.85rem;text-align:center";
+    list.appendChild(error);
+  }
 }
+
+function buildHistoryCard(item) {
+  const card = document.createElement("div");
+  card.style.cssText = "background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;margin-bottom:12px";
+
+  if (item.photo_thumb) {
+    const img = document.createElement("img");
+    img.src = item.photo_thumb;
+    img.alt = "保存写真";
+    img.loading = "lazy";
+    img.style.cssText = "width:100%;max-height:220px;object-fit:cover;border-radius:6px;margin-bottom:10px";
+    card.appendChild(img);
+  }
+
+  const meta = document.createElement("div");
+  meta.style.cssText = "display:flex;justify-content:space-between;font-size:.75rem;color:#64748b;margin-bottom:6px";
+  const date = document.createElement("span");
+  date.textContent = item.created_at || "";
+  const cat = document.createElement("span");
+  cat.textContent = "#" + (item.category_minor || "life");
+  cat.style.cssText = "color:#f97316;font-weight:bold";
+  meta.append(date, cat);
+  card.appendChild(meta);
+
+  if (item.short_memo) {
+    const memo = document.createElement("div");
+    memo.textContent = "✍️ メモ: " + item.short_memo;
+    memo.style.cssText = "font-size:.8rem;color:#94a3b8;margin-bottom:6px";
+    card.appendChild(memo);
+  }
+
+  const comment = document.createElement("div");
+  comment.textContent = item.ai_comment || "記録完了";
+  comment.style.cssText = "font-size:.9rem;color:#f8fafc;line-height:1.5;background:#1e293b;padding:10px;border-radius:6px;border-left:3px solid #f97316";
+  card.appendChild(comment);
+  return card;
 }
 
 function closeHistory() {
@@ -411,23 +320,17 @@ function closeHistory() {
   document.getElementById("mainCard").style.display = "block";
 }
 
-// --------------------------------------------------
-// 機能9: 画像スワイプ拡大モーダル
-// --------------------------------------------------
-let modalIndex = 0;
 function openImageModal(idx) {
   modalIndex = idx;
   document.getElementById("modalImg").src = imagesData[modalIndex];
   document.getElementById("imageModal").style.display = "flex";
 }
-function closeImageModal() {
-  document.getElementById("imageModal").style.display = "none";
-}
+function closeImageModal() { document.getElementById("imageModal").style.display = "none"; }
 function prevImage(e) {
   e.stopPropagation();
-  if (modalIndex > 0) { modalIndex--; openImageModal(modalIndex); }
+  if (modalIndex > 0) openImageModal(modalIndex - 1);
 }
 function nextImage(e) {
   e.stopPropagation();
-  if (modalIndex < imagesData.length - 1) { modalIndex++; openImageModal(modalIndex); }
+  if (modalIndex < imagesData.length - 1) openImageModal(modalIndex + 1);
 }
