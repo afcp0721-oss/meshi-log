@@ -284,7 +284,7 @@ function buildHistoryCard(item) {
 
   if (item.photo_thumb) {
     const img = document.createElement("img");
-    img.src = item.photo_thumb;
+    img.src = `${RELAY_SERVER_URL}/api/image?url=${encodeURIComponent(item.photo_thumb)}`;
     img.alt = "保存写真";
     img.loading = "lazy";
     img.style.cssText = "width:100%;max-height:220px;object-fit:cover;border-radius:6px;margin-bottom:10px";
