@@ -27,6 +27,40 @@ export default {
       }
     }
 
+    if (request.method === "GET" && url.pathname === "/api/image") {
+      try {
+        const raw = (url.searchParams.get("url") || "").trim();
+        const target = new URL(raw);
+        if (target.protocol !== "https:" || !isAllowedDiscordCdnHost(target.hostname)) {
+          return json({ error: "Invalid image URL" }, 400, headers);
+        }
+
+        const upstream = await fetch(target.toString(), {
+          headers: { "User-Agent": "MeshiLog/1.0" }
+        });
+        if (!upstream.ok) {
+          return json({ error: "画像を取得できませんでした" }, 502, headers);
+        }
+
+        const contentType = upstream.headers.get("Content-Type") || "application/octet-stream";
+        if (!contentType.toLowerCase().startsWith("image/")) {
+          return json({ error: "画像ではありません" }, 502, headers);
+        }
+
+        return new Response(upstream.body, {
+          status: 200,
+          headers: {
+            ...cors,
+            "Content-Type": contentType,
+            "Cache-Control": "public, max-age=3600"
+          }
+        });
+      } catch (err) {
+        console.error("Image proxy error:", err);
+        return json({ error: "画像URLが不正です" }, 400, headers);
+      }
+    }
+
     if (request.method === "POST" && url.pathname === "/") {
       try {
         const payload = await request.json();
@@ -209,4 +243,9 @@ async function callGemini(apiKey, modelName, prompt, images) {
   text = text.replace(/```json/gi, "").replace(/```/g, "").trim();
   try { return JSON.parse(text); }
   catch { return { post_text: text || "記録しました。" }; }
+}
+
+function isAllowedDiscordCdnHost(hostname) {
+  const host = hostname.toLowerCase();
+  return host === "cdn.discordapp.com" || host === "media.discordapp.net";
 }
