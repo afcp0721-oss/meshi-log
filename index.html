@@ -42,8 +42,7 @@
       white-space: nowrap;
       flex-shrink: 0;
     }
-    /* モード切替タブ */
-    .mode-switch { display: flex; background: #0f172a; border-radius: 10px; padding: 4px; border: 1px solid #334155; margin-bottom: 14px; }
+    /* PROは保持するが通常導線では隠す */\n    .mode-switch { display: none; }
     .mode-btn { flex: 1; text-align: center; padding: 8px; font-size: 0.85rem; font-weight: bold; color: #94a3b8; cursor: pointer; border-radius: 8px; border: none; background: transparent; }
     .mode-btn.active { background: #ea580c; color: #fff; }
 
@@ -53,7 +52,7 @@
     .chip { background: #334155; color: #e2e8f0; font-size: 0.8rem; padding: 5px 10px; border-radius: 16px; cursor: pointer; }
     .chip.active { background: #ea580c; color: #fff; font-weight: bold; }
 
-    /* 6枚写真グリッド枠（初期デザイン復活） */
+    /* 最大3枚の写真グリッド */
     .photo-grid-box { border: 2px dashed #475569; border-radius: 12px; padding: 12px; background: #0f172a; text-align: center; margin: 10px 0; }
     .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
     .photo-cell { position: relative; width: 100%; aspect-ratio: 1/1; border-radius: 8px; overflow: hidden; border: 1px solid #334155; background: #1e293b; }
@@ -129,10 +128,7 @@
       <hr style="border: 0; border-top: 1px solid #334155; margin: 16px 0;">
       <div class="title" style="font-size: 1rem;">🚀 外部連携・バックアップ母艦</div>
       
-      <label>Discord Webhook URL（無期限・無料アルバム母艦）</label>
-      <input type="text" id="discordInput" placeholder="https://discord.com/api/webhooks/...">
-
-      <label>LINE 連携（ID / Notify）</label>
+            <label>LINE 連携（ID / Notify）</label>
       <input type="text" id="lineInput" placeholder="LINE ID または Token">
 
       <button class="btn-main" onclick="saveSettings()">設定を保存する</button>
@@ -171,22 +167,16 @@
       </div>
     </div>
 
-      <!-- モード切り替えタブ -->
-      <div class="mode-switch">
-        <button id="btnModeBasic" class="mode-btn active" onclick="switchMode('basic')">⚡ おまかせ（爆速）</button>
-        <button id="btnModePro" class="mode-btn" onclick="switchMode('pro')">⚙️ こだわり（PRO）</button>
-      </div>
-
-      <!-- トースト通知枠 -->
+      <!-- PRO機能はコードとして保持。通常画面ではおまかせを標準にする -->\n      <div class="mode-switch" aria-hidden="true"></div>\n\n      <!-- トースト通知枠 -->
       <div id="toastBox" class="toast"></div>
 
       <!-- プライバシー警告枠 -->
       <div id="alertBox" class="alert-box"></div>
 
-      <!-- 6枚写真選択エリア（初期グリッドデザイン） -->
+      <!-- 最大3枚の写真選択エリア -->
       <div class="photo-grid-box">
         <input type="file" id="fileInput" accept="image/*" multiple style="display: none;" onchange="handleFileSelect(event)">
-        <div style="font-size: 0.85rem; color: #cbd5e1; margin-bottom: 6px;">📸 写真を選択（最大6枚）</div>
+        <div style="font-size: 0.85rem; color: #cbd5e1; margin-bottom: 6px;">📸 写真を選択（最大3枚）</div>
         <div id="photoGrid" class="photo-grid">
           <!-- 選択したサムネイルと「＋」枠がここに並びます -->
         </div>
@@ -197,36 +187,21 @@
         <input type="text" id="shortMemoInput" placeholder="例：店名=大勝軒、現場の帰り道" 
                style="width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px; color: #f8fafc; font-size: 0.9rem; box-sizing: border-box;">
       </div>
-    <!-- 【おまかせモード用】1秒保存ボタン -->
+    <!-- おまかせモード -->
       <div id="basicActionArea">
         <button id="btnQuickUpload" class="btn-main" onclick="uploadQuick()" disabled>
   <span id="spinBasic" class="spinner" style="display: none;"></span>
-  <span id="textBasic">⚡ 預ける（1秒で完了）</span>
+  <span id="textBasic">預ける</span>
 </button>
       </div>
 
      <!-- 【こだわりPROモード用】カスタム生成エリア -->
-      <div id="proActionArea" style="display: none;">
-        <label>文体・トーン</label>
-        <div class="chip-wrap" id="toneChips">
-          <span class="chip active" onclick="setTone(this, 'いつもの相棒')">いつもの相棒</span>
-          <span class="chip" onclick="setTone(this, 'グルメ評論家')">グルメ評論家</span>
-          <span class="chip" onclick="setTone(this, '辛口ツッコミ')">辛口ツッコミ</span>
-        </div>
-
-        <label>💡 今日の気分・フレーズ（タップで選択）</label>
-        <div class="chip-wrap" id="moodChips">
-          <span class="chip" onclick="toggleMood(this, '最高')">😍 最高</span>
-          <span class="chip" onclick="toggleMood(this, 'ガッツリ')">💪 ガッツリ</span>
-          <span class="chip" onclick="toggleMood(this, 'ヘルシー')">🥗 ヘルシー</span>
-          <span class="chip" onclick="toggleMood(this, 'サクッと')">⚡ サクッと</span>
-          <span class="chip" onclick="toggleMood(this, 'ご褒美')">✨ ご褒美</span>
-          <span class="chip" id="dynamicPhraseChip" onclick="toggleMood(this, '')">リピ確定！</span>
-        </div>
-
+      <div id="proActionArea" style="display:none;">
+        <div class="chip-wrap" id="toneChips"><span class="chip active">いつもの相棒</span></div>
+        <div class="chip-wrap" id="moodChips"><span class="chip" id="dynamicPhraseChip">リピ確定！</span></div>
         <button id="btnProGenerate" class="btn-main" onclick="generatePro()" disabled>
-          <span id="spinPro" class="spinner" style="display: none;"></span>
-          <span id="textPro">✨ じっくり生成してプレビュー</span>
+          <span id="spinPro" class="spinner" style="display:none;"></span>
+          <span id="textPro">✨ じっくり預ける</span>
         </button>
       </div>
 
@@ -251,6 +226,6 @@
   </div>
 
   <!-- スクリプト読み込み（キャッシュ対策 v=4） -->
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>
