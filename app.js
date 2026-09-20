@@ -5,7 +5,6 @@ let userId = localStorage.getItem("meshi_user_id");
 let aiName = localStorage.getItem("meshi_ai_name") || "ログアシスタント";
 let userCall = localStorage.getItem("meshi_user_call") || "ニックネーム";
 let myPhrase = localStorage.getItem("meshi_my_phrase") || "リピ確定！";
-let lineId = localStorage.getItem("meshi_line_id") || "";
 let imagesData = [];
 let selectedTone = "いつもの相棒";
 let selectedMood = "";
@@ -224,7 +223,6 @@ function openSettings() {
   document.getElementById("userCallInput").value = userCall;
   document.getElementById("aiNameInput").value = aiName;
   document.getElementById("myPhraseInput").value = myPhrase;
-  document.getElementById("lineInput").value = lineId;
   document.getElementById("settingsCard").style.display = "block";
   document.getElementById("mainCard").style.display = "none";
 }
@@ -240,12 +238,10 @@ async function saveSettings() {
   userCall = document.getElementById("userCallInput").value.trim() || "ニックネーム";
   aiName = document.getElementById("aiNameInput").value.trim() || "ログアシスタント";
   myPhrase = document.getElementById("myPhraseInput").value.trim() || "リピ確定！";
-  lineId = document.getElementById("lineInput").value.trim();
 
   localStorage.setItem("meshi_user_call", userCall);
   localStorage.setItem("meshi_ai_name", aiName);
   localStorage.setItem("meshi_my_phrase", myPhrase);
-  localStorage.setItem("meshi_line_id", lineId);
   updateUIHeaders();
   showToast("設定を保存しました");
   closeSettings();
