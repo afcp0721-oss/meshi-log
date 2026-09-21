@@ -39,6 +39,10 @@ jobs:
             [worker.includes('url.pathname === "/api/image"'), 'Worker image proxy route exists'],
             [worker.includes('cdn.discordapp.com') && worker.includes('media.discordapp.net'), 'image proxy is restricted to Discord CDN'],
             [app.includes('/api/image?url='), 'history uses Worker image proxy'],
+            [worker.includes('url.pathname === "/api/assist"'), 'assist API exists'],
+            [worker.includes('meal_report') && worker.includes('estimated_calories_min'), 'meal report includes calorie estimate'],
+            [app.includes('𝕏 投稿下書き') && app.includes('めしレポ'), 'history exposes X draft and meal report actions'],
+            [app.includes('twitter.com/intent/tweet'), 'X share uses intent URL'],
             [wrangler.includes('"binding": "DB"') && wrangler.includes('"database_name": "meshi-log-db"'), 'D1 binding present']
           ];
           let failed = false;
