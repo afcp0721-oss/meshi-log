@@ -1,4 +1,4 @@
-import { normalizeMealReport, profileEntry } from "./analysis.mjs";
+import { normalizeMealReport, normalizeXDraft, profileEntry } from "./analysis.mjs";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -85,7 +85,9 @@ export default {
 あなたはSNS投稿の編集アシスタントです。
 以下の写真日記記録から、Xに投稿できる自然な日本語の下書きを1つ作ってください。
 誇張、架空の店名・商品名・人物名・場所名は禁止です。確認できない固有名詞は書かないでください。
-ハッシュタグは0〜2個。短く読みやすくしてください。
+本文・ハッシュタグ・空白を含め120〜130文字程度、最大130文字にしてください。
+材料となる情報が少ない場合は短くて構いません。文字数を埋めるために内容を創作しないでください。
+ハッシュタグは0〜2個。自然に読み切れる文章にしてください。
 記録コメント: ${record.post_text || ""}
 メモ: ${record.short_memo || ""}
 カテゴリ: ${record.category_minor || "other"}
@@ -98,7 +100,7 @@ export default {
           if (typeof result.x_post_text !== "string" || !result.x_post_text.trim()) {
             throw new Error("Missing X draft");
           }
-          return json({ x_post_text: result.x_post_text.trim().slice(0, 1000), profile_entry: profileEntry(record) }, 200, headers);
+          return json({ x_post_text: normalizeXDraft(result.x_post_text), profile_entry: profileEntry(record) }, 200, headers);
         }
 
         if (record.category_major !== "food") {

@@ -39,8 +39,10 @@ const { resolve } = require('node:path');
     assert.equal(await page.locator('#historyList img').count(), 0); // AI HTML remains text.
     await page.getByRole('button', { name: '𝕏 投稿下書き' }).first().click();
     const draft = page.getByRole('textbox', { name: 'X投稿の下書き（編集できます）' });
+    await draft.fill('🍚' + 'あ'.repeat(129));
+    assert.equal(await page.locator('.x-draft-count').textContent(), '130文字（目安130文字）');
     await draft.fill('手直し & 日本語 #昼食');
-    let link = page.getByRole('link', { name: '𝕏 にシェアする（下書き）' });
+    let link = page.getByRole('link', { name: '𝕏 でポスト' });
     assert.equal(new URL(await link.getAttribute('href')).searchParams.get('text'), '手直し & 日本語 #昼食');
     assert.equal(await link.getAttribute('rel'), 'noopener noreferrer');
     await page.getByRole('button', { name: '🍽️ めしレポ' }).click();

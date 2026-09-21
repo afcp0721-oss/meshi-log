@@ -51,3 +51,11 @@ export function profileEntry(record, report = null) {
     } : null
   };
 }
+
+// Count visible characters so emoji sequences are not cut in the middle.
+export function normalizeXDraft(value) {
+  const draft = typeof value === "string" ? value.trim() : "";
+  const characters = [...new Intl.Segmenter("ja", { granularity: "grapheme" }).segment(draft)].map(x => x.segment);
+  if (characters.length <= 130) return draft;
+  return characters.slice(0, 129).join("").trimEnd() + "…";
+}

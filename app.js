@@ -404,17 +404,22 @@ function renderXDraft(area, text, onEdit = () => {}) {
   share.className = "btn-x";
   share.target = "_blank";
   share.rel = "noopener noreferrer";
-  share.textContent = "𝕏 にシェアする（下書き）";
+  share.textContent = "𝕏 でポスト";
+  const counter = document.createElement("div");
+  counter.className = "x-draft-count";
+  counter.style.cssText = "font-size:.75rem;color:#94a3b8;margin-top:6px";
   const refreshLink = () => {
     share.href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(textarea.value)}`;
+    const length = [...new Intl.Segmenter("ja", { granularity: "grapheme" }).segment(textarea.value)].length;
+    counter.textContent = `${length}文字（目安130文字）`;
     onEdit(textarea.value);
   };
   textarea.addEventListener("input", refreshLink);
   refreshLink();
   const note = document.createElement("p");
-  note.textContent = "内容を確認・編集してXで投稿できます。写真は自動添付されません。";
+  note.textContent = "130文字程度の下書きです。Xの投稿画面で確認してポストできます。写真はX側で追加してください。";
   note.style.cssText = "font-size:.75rem;color:#94a3b8;margin-top:6px";
-  area.append(title, textarea, note, share);
+  area.append(title, textarea, counter, note, share);
 }
 
 function renderMealReport(area, report) {

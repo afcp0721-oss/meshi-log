@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { normalizeMealReport, profileEntry } from '../analysis.mjs';
+import { normalizeMealReport, normalizeXDraft, profileEntry } from '../analysis.mjs';
 const source = (await readFile(new URL('../worker.js', import.meta.url), 'utf8'))
   .replace('"./analysis.mjs"', JSON.stringify(new URL('../analysis.mjs', import.meta.url).href));
 const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
@@ -193,4 +193,20 @@ test('HTML image responses are rejected by both report and proxy', async t => {
   const s = setup(t, { imageType: 'text/html' });
   assert.equal((await s.request('/api/assist', assist())).status, 422);
   assert.equal((await s.request('/api/image?url=' + encodeURIComponent(record.discord_image_url))).status, 502);
+});
+
+
+test('X draft stays within 130 visible characters without breaking emoji', () => {
+  assert.equal(normalizeXDraft('  短い記録。  '), '短い記録。');
+  assert.equal(normalizeXDraft('あ'.repeat(130)), 'あ'.repeat(130));
+  assert.equal(normalizeXDraft('あ'.repeat(131)), 'あ'.repeat(129) + '…');
+  const family = '👨‍👩‍👧‍👦';
+  assert.equal(normalizeXDraft(family.repeat(131)), family.repeat(129) + '…');
+});
+
+test('X API enforces the length even when AI ignores the prompt', async t => {
+  const s = setup(t, { ai: { x_post_text: 'あ'.repeat(200) } });
+  const res = await s.request('/api/assist', assist('x_post'));
+  assert.equal((await res.json()).x_post_text, 'あ'.repeat(129) + '…');
+  assert(s.calls[0].init.body.includes('120〜130文字程度'));
 });
