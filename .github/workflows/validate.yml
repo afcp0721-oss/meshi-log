@@ -20,6 +20,14 @@ jobs:
         run: node --check app.js
       - name: Check Worker JavaScript syntax
         run: cp worker.js /tmp/worker.mjs && node --check /tmp/worker.mjs
+      - name: Test Worker flow and analysis contract
+        run: node --test tests/*.test.mjs
+      - name: Install browser test tools
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npx playwright install --with-deps chromium
+      - name: Test mobile history and optional actions
+        run: node tests/browser-smoke.cjs
       - name: Verify product invariants
         run: |
           node - <<'NODE'
@@ -27,6 +35,7 @@ jobs:
           const app = fs.readFileSync('app.js','utf8');
           const html = fs.readFileSync('index.html','utf8');
           const worker = fs.readFileSync('worker.js','utf8');
+          const analysis = fs.readFileSync("analysis.mjs", "utf8");
           const wrangler = fs.readFileSync('wrangler.jsonc','utf8');
           const checks = [
             [app.includes('const MAX_PHOTOS = 3;'), 'frontend max photos is 3'],
@@ -40,7 +49,7 @@ jobs:
             [worker.includes('cdn.discordapp.com') && worker.includes('media.discordapp.net'), 'image proxy is restricted to Discord CDN'],
             [app.includes('/api/image?url='), 'history uses Worker image proxy'],
             [worker.includes('url.pathname === "/api/assist"'), 'assist API exists'],
-            [worker.includes('meal_report') && worker.includes('estimated_calories_min'), 'meal report includes calorie estimate'],
+            [worker.includes('meal_report') && analysis.includes('estimated_calories_min'), 'meal report includes calorie estimate'],
             [app.includes('𝕏 投稿下書き') && app.includes('めしレポ'), 'history exposes X draft and meal report actions'],
             [app.includes('twitter.com/intent/tweet'), 'X share uses intent URL'],
             [wrangler.includes('"binding": "DB"') && wrangler.includes('"database_name": "meshi-log-db"'), 'D1 binding present']

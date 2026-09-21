@@ -336,6 +336,7 @@ function buildHistoryCard(item) {
 
   const assistArea = document.createElement("div");
   assistArea.className = "assist-area";
+  assistArea.setAttribute("aria-live", "polite");
   assistArea.style.cssText = "display:none;margin-top:10px";
   card.appendChild(assistArea);
   return card;
@@ -343,8 +344,18 @@ function buildHistoryCard(item) {
 
 async function loadAssist(item, action, card, button) {
   const area = card.querySelector(".assist-area");
-  if (!area || button.disabled) return;
-  button.disabled = true;
+  if (!area || card.dataset.assistBusy === "true") return;
+  const cacheKey = action === "x_post" ? "xDraft" : "mealReport";
+  if (card.assistCache?.[cacheKey] !== undefined) {
+    area.replaceChildren();
+    area.style.display = "block";
+    if (action === "x_post") renderXDraft(area, card.assistCache.xDraft, value => { card.assistCache.xDraft = value; });
+    else renderMealReport(area, card.assistCache.mealReport);
+    return;
+  }
+  card.dataset.assistBusy = "true";
+  const buttons = card.querySelectorAll("button");
+  buttons.forEach(btn => { btn.disabled = true; });
   const oldText = button.textContent;
   button.textContent = "生成中…";
   area.style.display = "block";
@@ -360,18 +371,25 @@ async function loadAssist(item, action, card, button) {
     if (!res.ok) throw new Error(data.error || "生成できませんでした");
     area.replaceChildren();
 
-    if (action === "x_post") renderXDraft(area, data.x_post_text || "");
-    else renderMealReport(area, data.meal_report || {});
+    card.assistCache ||= {};
+    if (action === "x_post") {
+      card.assistCache.xDraft = data.x_post_text || "";
+      renderXDraft(area, card.assistCache.xDraft, value => { card.assistCache.xDraft = value; });
+    } else {
+      card.assistCache.mealReport = data.meal_report || {};
+      renderMealReport(area, card.assistCache.mealReport);
+    }
   } catch (err) {
     area.textContent = err.message;
     area.style.color = "#f87171";
   } finally {
-    button.disabled = false;
+    card.dataset.assistBusy = "false";
+    buttons.forEach(btn => { btn.disabled = false; });
     button.textContent = oldText;
   }
 }
 
-function renderXDraft(area, text) {
+function renderXDraft(area, text, onEdit = () => {}) {
   area.style.color = "";
   const title = document.createElement("div");
   title.textContent = "𝕏 投稿下書き";
@@ -379,6 +397,7 @@ function renderXDraft(area, text) {
 
   const textarea = document.createElement("textarea");
   textarea.value = text;
+  textarea.setAttribute("aria-label", "X投稿の下書き（編集できます）");
   textarea.style.cssText = "width:100%;min-height:90px;box-sizing:border-box;background:#0f172a;color:#fff;border:1px solid #475569;border-radius:8px;padding:8px;font-size:.88rem";
 
   const share = document.createElement("a");
@@ -388,10 +407,14 @@ function renderXDraft(area, text) {
   share.textContent = "𝕏 にシェアする（下書き）";
   const refreshLink = () => {
     share.href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(textarea.value)}`;
+    onEdit(textarea.value);
   };
   textarea.addEventListener("input", refreshLink);
   refreshLink();
-  area.append(title, textarea, share);
+  const note = document.createElement("p");
+  note.textContent = "内容を確認・編集してXで投稿できます。写真は自動添付されません。";
+  note.style.cssText = "font-size:.75rem;color:#94a3b8;margin-top:6px";
+  area.append(title, textarea, note, share);
 }
 
 function renderMealReport(area, report) {
@@ -409,9 +432,10 @@ function renderMealReport(area, report) {
   box.appendChild(name);
 
   const kcal = document.createElement("div");
-  const min = Number(report.estimated_calories_min || 0);
-  const max = Number(report.estimated_calories_max || 0);
-  kcal.textContent = min || max ? `推定カロリー：約${min}〜${max} kcal` : "推定カロリー：算出できませんでした";
+  const min = report.estimated_calories_min;
+  const max = report.estimated_calories_max;
+  const hasRange = Number.isFinite(min) && Number.isFinite(max) && min > 0 && max >= min;
+  kcal.textContent = hasRange ? `推定カロリー：約${min}〜${max} kcal` : "推定カロリー：算出できませんでした";
   kcal.style.cssText = "font-weight:bold;margin-top:4px";
   box.appendChild(kcal);
 
@@ -432,7 +456,7 @@ function renderMealReport(area, report) {
     box.appendChild(comment);
   }
   const note = document.createElement("div");
-  note.textContent = report.disclaimer || "写真からの概算です。";
+  note.textContent = "保存された先頭の写真1枚が対象です。写真からの概算で、実際の量・材料・調理法により変わります。";
   note.style.cssText = "font-size:.72rem;color:#94a3b8;margin-top:6px";
   box.appendChild(note);
   area.appendChild(box);
