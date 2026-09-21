@@ -312,7 +312,130 @@ function buildHistoryCard(item) {
   comment.textContent = item.ai_comment || "記録完了";
   comment.style.cssText = "font-size:.9rem;color:#f8fafc;line-height:1.5;background:#1e293b;padding:10px;border-radius:6px;border-left:3px solid #f97316";
   card.appendChild(comment);
+
+  const actions = document.createElement("div");
+  actions.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;margin-top:10px";
+
+  const xBtn = document.createElement("button");
+  xBtn.type = "button";
+  xBtn.className = "btn-gear";
+  xBtn.textContent = "𝕏 投稿下書き";
+  xBtn.addEventListener("click", () => loadAssist(item, "x_post", card, xBtn));
+  actions.appendChild(xBtn);
+
+  if (item.category_major === "food") {
+    const reportBtn = document.createElement("button");
+    reportBtn.type = "button";
+    reportBtn.className = "btn-gear";
+    reportBtn.textContent = "🍽️ めしレポ";
+    reportBtn.addEventListener("click", () => loadAssist(item, "meal_report", card, reportBtn));
+    actions.appendChild(reportBtn);
+  }
+
+  card.appendChild(actions);
+
+  const assistArea = document.createElement("div");
+  assistArea.className = "assist-area";
+  assistArea.style.cssText = "display:none;margin-top:10px";
+  card.appendChild(assistArea);
   return card;
+}
+
+async function loadAssist(item, action, card, button) {
+  const area = card.querySelector(".assist-area");
+  if (!area || button.disabled) return;
+  button.disabled = true;
+  const oldText = button.textContent;
+  button.textContent = "生成中…";
+  area.style.display = "block";
+  area.textContent = "AIが確認中…";
+
+  try {
+    const res = await fetch(`${RELAY_SERVER_URL}/api/assist`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, recordId: item.record_id, action })
+    });
+    const data = await safeJson(res);
+    if (!res.ok) throw new Error(data.error || "生成できませんでした");
+    area.replaceChildren();
+
+    if (action === "x_post") renderXDraft(area, data.x_post_text || "");
+    else renderMealReport(area, data.meal_report || {});
+  } catch (err) {
+    area.textContent = err.message;
+    area.style.color = "#f87171";
+  } finally {
+    button.disabled = false;
+    button.textContent = oldText;
+  }
+}
+
+function renderXDraft(area, text) {
+  area.style.color = "";
+  const title = document.createElement("div");
+  title.textContent = "𝕏 投稿下書き";
+  title.style.cssText = "font-size:.8rem;font-weight:bold;color:#cbd5e1;margin-bottom:6px";
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.cssText = "width:100%;min-height:90px;box-sizing:border-box;background:#0f172a;color:#fff;border:1px solid #475569;border-radius:8px;padding:8px;font-size:.88rem";
+
+  const share = document.createElement("a");
+  share.className = "btn-x";
+  share.target = "_blank";
+  share.rel = "noopener noreferrer";
+  share.textContent = "𝕏 にシェアする（下書き）";
+  const refreshLink = () => {
+    share.href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(textarea.value)}`;
+  };
+  textarea.addEventListener("input", refreshLink);
+  refreshLink();
+  area.append(title, textarea, share);
+}
+
+function renderMealReport(area, report) {
+  area.style.color = "";
+  const box = document.createElement("div");
+  box.style.cssText = "background:#111827;border:1px solid #374151;border-radius:8px;padding:10px;font-size:.84rem;line-height:1.55;color:#e5e7eb";
+
+  const title = document.createElement("div");
+  title.textContent = "🍽️ めしレポ";
+  title.style.cssText = "font-weight:bold;color:#fb923c;margin-bottom:6px";
+  box.appendChild(title);
+
+  const name = document.createElement("div");
+  name.textContent = report.meal_name || "食事";
+  box.appendChild(name);
+
+  const kcal = document.createElement("div");
+  const min = Number(report.estimated_calories_min || 0);
+  const max = Number(report.estimated_calories_max || 0);
+  kcal.textContent = min || max ? `推定カロリー：約${min}〜${max} kcal` : "推定カロリー：算出できませんでした";
+  kcal.style.cssText = "font-weight:bold;margin-top:4px";
+  box.appendChild(kcal);
+
+  if (Array.isArray(report.ingredients) && report.ingredients.length) {
+    const ingredients = document.createElement("div");
+    ingredients.textContent = "見える食材：" + report.ingredients.join("、");
+    box.appendChild(ingredients);
+  }
+  if (report.nutrition_balance) {
+    const nutrition = document.createElement("div");
+    nutrition.textContent = "バランス：" + report.nutrition_balance;
+    box.appendChild(nutrition);
+  }
+  if (report.comment) {
+    const comment = document.createElement("div");
+    comment.textContent = report.comment;
+    comment.style.cssText = "margin-top:4px";
+    box.appendChild(comment);
+  }
+  const note = document.createElement("div");
+  note.textContent = report.disclaimer || "写真からの概算です。";
+  note.style.cssText = "font-size:.72rem;color:#94a3b8;margin-top:6px";
+  box.appendChild(note);
+  area.appendChild(box);
 }
 
 function closeHistory() {
