@@ -18,7 +18,7 @@ export default {
         if (!userId) return json({ error: "userId is required", results: [] }, 400, headers);
 
         const { results } = await env.DB.prepare(
-          "SELECT record_id, post_text AS ai_comment, discord_image_url AS photo_thumb, short_memo, category_minor, created_at FROM activity_records WHERE user_id = ? ORDER BY created_at DESC LIMIT 30"
+          "SELECT record_id, post_text AS ai_comment, discord_image_url AS photo_thumb, short_memo, category_major, category_minor, created_at FROM activity_records WHERE user_id = ? ORDER BY created_at DESC LIMIT 30"
         ).bind(userId).all();
         return json({ results: results || [] }, 200, headers);
       } catch (err) {
@@ -58,6 +58,87 @@ export default {
       } catch (err) {
         console.error("Image proxy error:", err);
         return json({ error: "画像URLが不正です" }, 400, headers);
+      }
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/assist") {
+      try {
+        const body = await request.json();
+        const userId = String(body.userId || "").slice(0, 100);
+        const recordId = Number(body.recordId);
+        const action = String(body.action || "");
+        if (!userId || !Number.isFinite(recordId) || !["x_post", "meal_report"].includes(action)) {
+          return json({ error: "Invalid assist request" }, 400, headers);
+        }
+
+        const record = await env.DB.prepare(
+          "SELECT record_id, post_text, discord_image_url, short_memo, category_major, category_minor, created_at FROM activity_records WHERE user_id = ? AND record_id = ? LIMIT 1"
+        ).bind(userId, recordId).first();
+        if (!record) return json({ error: "記録が見つかりません" }, 404, headers);
+
+        const model = env.GEMINI_MODEL || "gemini-flash-latest";
+        let images = [];
+        if (record.discord_image_url) {
+          const dataUrl = await discordImageToDataUrl(record.discord_image_url);
+          if (dataUrl) images = [dataUrl];
+        }
+
+        if (action === "x_post") {
+          const prompt = `
+あなたはSNS投稿の編集アシスタントです。
+以下の写真日記記録から、Xに投稿できる自然な日本語の下書きを1つ作ってください。
+誇張、架空の店名・商品名・人物名・場所名は禁止です。確認できない固有名詞は書かないでください。
+ハッシュタグは0〜2個。短く読みやすくしてください。
+記録コメント: ${record.post_text || ""}
+メモ: ${record.short_memo || ""}
+カテゴリ: ${record.category_minor || "other"}
+次のJSONだけを返してください:
+{"x_post_text":"投稿下書き"}
+`;
+          const result = await callGemini(env.GEMINI_API_KEY, model, prompt, images);
+          return json({ x_post_text: String(result.x_post_text || record.post_text || "").slice(0, 1000) }, 200, headers);
+        }
+
+        if (record.category_major !== "food") {
+          return json({ error: "めしレポは食事記録のみ対象です" }, 400, headers);
+        }
+        if (!images.length) {
+          return json({ error: "写真を取得できないため、めしレポを作成できません" }, 422, headers);
+        }
+
+        const prompt = `
+あなたは食事写真の簡易レポートAIです。
+写真とメモから見える範囲だけで推定してください。医療診断や精密な栄養計算ではありません。
+量や調理法が不明な場合は幅を持たせ、断定しないでください。
+店名・商品名・人物名・場所名を推測・創作してはいけません。
+メモ: ${record.short_memo || "なし"}
+次のJSONだけを返してください:
+{
+  "meal_name":"料理の簡潔な説明",
+  "estimated_calories_min":0,
+  "estimated_calories_max":0,
+  "ingredients":["見える主な食材"],
+  "nutrition_balance":"ざっくりした栄養バランス",
+  "comment":"短い一言"
+}
+`;
+        const result = await callGemini(env.GEMINI_API_KEY, model, prompt, images);
+        const min = clampCalories(result.estimated_calories_min);
+        const max = Math.max(min, clampCalories(result.estimated_calories_max));
+        return json({
+          meal_report: {
+            meal_name: String(result.meal_name || "食事").slice(0, 120),
+            estimated_calories_min: min,
+            estimated_calories_max: max,
+            ingredients: Array.isArray(result.ingredients) ? result.ingredients.slice(0, 8).map(x => String(x).slice(0, 60)) : [],
+            nutrition_balance: String(result.nutrition_balance || "").slice(0, 300),
+            comment: String(result.comment || "").slice(0, 200),
+            disclaimer: "写真からの概算です。実際の量・材料・調理法で変わります。"
+          }
+        }, 200, headers);
+      } catch (err) {
+        console.error("Assist error:", err);
+        return json({ error: "AI補助を生成できませんでした" }, 500, headers);
       }
     }
 
@@ -243,6 +324,31 @@ async function callGemini(apiKey, modelName, prompt, images) {
   text = text.replace(/```json/gi, "").replace(/```/g, "").trim();
   try { return JSON.parse(text); }
   catch { return { post_text: text || "記録しました。" }; }
+}
+
+async function discordImageToDataUrl(rawUrl) {
+  try {
+    const target = new URL(rawUrl);
+    if (target.protocol !== "https:" || !isAllowedDiscordCdnHost(target.hostname)) return "";
+    const res = await fetch(target.toString(), { headers: { "User-Agent": "MeshiLog/1.0" } });
+    if (!res.ok) return "";
+    const contentType = (res.headers.get("Content-Type") || "").toLowerCase();
+    if (!contentType.startsWith("image/")) return "";
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    return `data:${contentType.split(";")[0]};base64,${btoa(binary)}`;
+  } catch {
+    return "";
+  }
+}
+
+function clampCalories(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(10000, Math.round(n));
 }
 
 function isAllowedDiscordCdnHost(hostname) {
