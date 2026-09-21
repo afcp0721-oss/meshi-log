@@ -210,3 +210,111 @@ test('X API enforces the length even when AI ignores the prompt', async t => {
   assert.equal((await res.json()).x_post_text, 'あ'.repeat(129) + '…');
   assert(s.calls[0].init.body.includes('120〜130文字程度'));
 });
+
+const previewAnalysis = {
+  post_text: '野菜と鶏肉の定食ですね。', category_major: 'food', category_minor: 'meat',
+  x_post_text: '今日の昼食は鶏肉と野菜の定食。', meal_report: meal
+};
+
+test('preview returns comments, X draft and food report without saving or uploading', async t => {
+  const s = setup(t, { rows: [], ai: previewAnalysis });
+  const res = await s.request('/api/preview', { userId: 'alice', images: [photo, photo], shortMemo: '昼食' });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.status, 'preview');
+  assert.equal(data.analysis.post_text, previewAnalysis.post_text);
+  assert.equal(data.x_post_text, previewAnalysis.x_post_text);
+  assert.equal(data.meal_report.estimated_calories_min, 500);
+  assert.equal(s.rows.length, 0);
+  assert.equal(s.jobs.length, 0);
+  assert.equal(s.calls.length, 1);
+  assert(s.calls[0].url.includes('generativelanguage'));
+  assert(s.statements.every(x => x.sql.startsWith('SELECT')));
+});
+
+test('reviewed save preserves edited comment exactly without another AI call', async t => {
+  const s = setup(t, { rows: [], ai: previewAnalysis });
+  const payload = { userId: 'alice', images: [photo, photo], shortMemo: '昼食' };
+  const preview = await (await s.request('/api/preview', payload)).json();
+  const edited = ' 自分で直したコメントです。\n量もちょうどよかった。 ';
+  const res = await s.request('/api/deposit-reviewed', { ...payload, confirmed: true,
+    reviewedAnalysis: { ...preview.analysis, post_text: edited } });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).status, 'saved');
+  assert.equal(s.rows.length, 1);
+  assert.equal(s.rows[0].post_text, edited);
+  assert.equal(s.rows[0].short_memo, '昼食');
+  assert.equal(s.calls.filter(x => x.url.includes('generativelanguage')).length, 1);
+  assert.equal(s.calls.filter(x => x.init.body instanceof FormData).length, 2);
+  assert.equal(s.jobs.length, 0); // The saved response waits for the D1 write.
+});
+
+test('reviewed save requires explicit confirmation and valid nonempty text before side effects', async t => {
+  const s = setup(t, { rows: [] });
+  const payload = { userId: 'alice', images: [photo], reviewedAnalysis: previewAnalysis };
+  assert.equal((await s.request('/api/deposit-reviewed', payload)).status, 400);
+  for (const post_text of ['', '   ', null, {}, 'a'.repeat(2001)]) {
+    assert.equal((await s.request('/api/deposit-reviewed', { ...payload, confirmed: true,
+      reviewedAnalysis: { post_text } })).status, 400);
+  }
+  assert.equal(s.rows.length, 0);
+  assert.equal(s.calls.length, 0);
+});
+
+test('new routes enforce the same 1–3 photo contract as quick deposit', async t => {
+  const s = setup(t);
+  for (const path of ['/api/preview', '/api/deposit-reviewed']) {
+    for (const images of [[], [photo, photo, photo, photo], ['data:text/html;base64,aA==']]) {
+      assert.equal((await s.request(path, { userId: 'alice', images, confirmed: true, reviewedAnalysis: previewAnalysis })).status, 400);
+    }
+  }
+  assert.equal(s.calls.length, 0);
+});
+
+test('client-returned classification is bounded and cannot override user or stored fields', async t => {
+  const s = setup(t, { rows: [] });
+  const res = await s.request('/api/deposit-reviewed', { userId: 'alice', images: [photo], confirmed: true,
+    reviewedAnalysis: { post_text: '確認済み', category_major: 'invented', userId: 'bob', discord_image_url: 'https://evil.test/' } });
+  assert.equal(res.status, 200);
+  const insert = s.statements.find(x => x.sql.startsWith('INSERT'));
+  assert.equal(insert.args[0], 'alice');
+  assert.equal(insert.args[2], record.discord_image_url);
+  assert.equal(insert.args[4], 'life');
+  assert.equal(s.calls.filter(x => x.url.includes('generativelanguage')).length, 0);
+});
+
+test('preview generation failure never deposits the photographs', async t => {
+  const s = setup(t, { rows: [], aiFailure: true });
+  assert.equal((await s.request('/api/preview', { userId: 'alice', images: [photo] })).status, 502);
+  assert.equal(s.rows.length, 0);
+  assert.equal(s.calls.length, 1);
+  assert.equal(s.jobs.length, 0);
+});
+
+test('reviewed D1 failure is returned to the confirmation screen', async t => {
+  const s = setup(t, { rows: [], dbFailure: true });
+  assert.equal((await s.request('/api/deposit-reviewed', { userId: 'alice', images: [photo], confirmed: true, reviewedAnalysis: previewAnalysis })).status, 500);
+  assert.equal(s.rows.length, 0);
+  assert.equal(s.calls.filter(x => x.url.includes('generativelanguage')).length, 0);
+});
+
+test('nonfood preview cannot expose a model-supplied meal report', async t => {
+  const s = setup(t, { ai: { ...previewAnalysis, category_major: 'scene' } });
+  const data = await (await s.request('/api/preview', { userId: 'alice', images: [photo] })).json();
+  assert.equal(data.meal_report, null);
+});
+
+test('quick deposit ignores client preview fields and continues server analysis', async t => {
+  const s = setup(t, { rows: [], ai: { post_text: 'サーバー生成' } });
+  assert.equal((await s.request('/', { userId: 'alice', images: [photo], reviewedAnalysis: { post_text: '差し替え' } })).status, 202);
+  await Promise.all(s.jobs);
+  assert.equal(s.rows[0].post_text, 'サーバー生成');
+});
+
+for (const ai of [{}, { post_text: [] }, { post_text: ' ' }]) {
+  test(`invalid preview cannot be saved as a successful generation: ${JSON.stringify(ai)}`, async t => {
+    const s = setup(t, { rows: [], ai });
+    assert.equal((await s.request('/api/preview', { userId: 'alice', images: [photo] })).status, 502);
+    assert.equal(s.rows.length, 0);
+  });
+}

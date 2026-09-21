@@ -59,3 +59,18 @@ export function normalizeXDraft(value) {
   if (characters.length <= 130) return draft;
   return characters.slice(0, 129).join("").trimEnd() + "…";
 }
+
+// Both AI output and client-returned review metadata are unverified input.
+export function normalizeDepositAnalysis(value) {
+  const result = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const oneOf = (key, values, fallback) => values.includes(result[key]) ? result[key] : fallback;
+  return {
+    post_text: typeof result.post_text === "string" ? result.post_text.slice(0, 2000) : "記録しました。",
+    category_major: oneOf("category_major", ["food", "life", "scene"], "life"),
+    category_minor: oneOf("category_minor", ["ramen", "meat", "cafe", "work_site", "driving", "hobby", "other"], "other"),
+    location_type: oneOf("location_type", ["eatery", "work_site", "vehicle", "outdoor", "home", "unknown"], "unknown"),
+    companion_type: oneOf("companion_type", ["solo", "pair", "group", "unknown"], "unknown"),
+    price_range: oneOf("price_range", ["under_1k", "1k_to_3k", "over_3k", "none"], "none"),
+    interest_tag: oneOf("interest_tag", ["noodle_craft", "car_maintenance", "heavy_work", "sports_gear", "none"], "none")
+  };
+}

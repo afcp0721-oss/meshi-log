@@ -1,4 +1,4 @@
-import { normalizeMealReport, normalizeXDraft, profileEntry } from "./analysis.mjs";
+import { normalizeMealReport, normalizeXDraft, normalizeDepositAnalysis, profileEntry } from "./analysis.mjs";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -148,9 +148,12 @@ export default {
       }
     }
 
-    if (request.method === "POST" && url.pathname === "/") {
+    if (request.method === "POST" && ["/", "/api/preview", "/api/deposit-reviewed"].includes(url.pathname)) {
       try {
         const payload = await request.json();
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+          return json({ error: "Invalid request" }, 400, headers);
+        }
         const images = Array.isArray(payload.images) ? payload.images : [];
         if (images.length < 1 || images.length > 3) {
           return json({ error: "写真は1〜3枚で預けてください" }, 400, headers);
@@ -159,7 +162,6 @@ export default {
           return json({ error: "対応していない画像形式です" }, 400, headers);
         }
         const clean = {
-          ...payload,
           userId: String(payload.userId || "").slice(0, 100),
           shortMemo: String(payload.shortMemo || "").slice(0, 500),
           aiName: String(payload.aiName || "ララ").slice(0, 50),
@@ -170,6 +172,36 @@ export default {
         };
         if (!clean.userId) return json({ error: "userId is required" }, 400, headers);
 
+        if (url.pathname === "/api/preview") {
+          try {
+            const result = await analyzeDeposit(clean, env, true);
+            return json({
+              status: "preview",
+              analysis: normalizeDepositAnalysis(result),
+              x_post_text: normalizeXDraft(result.x_post_text),
+              meal_report: result.category_major === "food" && result.meal_report?.is_food === true
+                ? normalizeMealReport(result.meal_report) : null
+            }, 200, headers);
+          } catch (err) {
+            console.error("Preview error:", err);
+            return json({ error: "コメントを生成できませんでした。写真はまだ預けられていません。" }, 502, headers);
+          }
+        }
+        if (url.pathname === "/api/deposit-reviewed") {
+          const review = payload.reviewedAnalysis;
+          if (payload.confirmed !== true || !review || typeof review !== "object" || Array.isArray(review) ||
+              typeof review.post_text !== "string" || !review.post_text.trim() || review.post_text.length > 2000) {
+            return json({ error: "確認したコメントを1〜2000文字で送ってください" }, 400, headers);
+          }
+          try {
+            // Save the exact reviewed text. No Gemini call on this path.
+            await handleBackgroundJob(clean, env, normalizeDepositAnalysis(review));
+            return json({ status: "saved", message: "確認した内容を記録しました" }, 200, headers);
+          } catch (err) {
+            console.error("Reviewed deposit error:", err);
+            return json({ error: "保存を確認できませんでした。過去ログを確認してから再試行してください。" }, 500, headers);
+          }
+        }
         ctx.waitUntil(handleBackgroundJob(clean, env));
         return json({ status: "accepted", message: "預かりました" }, 202, headers);
       } catch (err) {
@@ -185,8 +217,7 @@ function json(data, status, headers) {
   return new Response(JSON.stringify(data), { status, headers });
 }
 
-async function handleBackgroundJob(payload, env) {
-  const model = env.GEMINI_MODEL || "gemini-flash-latest";
+async function handleBackgroundJob(payload, env, reviewedAnalysis = null) {
   const webhook = env.DISCORD_WEBHOOK_URL || "";
   let imageUrls = [];
 
@@ -197,6 +228,36 @@ async function handleBackgroundJob(payload, env) {
     }
   }
 
+  const result = reviewedAnalysis || normalizeDepositAnalysis(await analyzeDeposit(payload, env));
+  const comment = result.post_text || "記録しました。";
+
+  try {
+    await env.DB.prepare(
+      "INSERT INTO activity_records (user_id, post_text, discord_image_url, short_memo, category_major, category_minor, location_type, companion_type, price_range, interest_tag) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(
+      payload.userId,
+      comment,
+      imageUrls[0] || "",
+      payload.shortMemo,
+      allowed(result.category_major, ["food","life","scene"], "life"),
+      allowed(result.category_minor, ["ramen","meat","cafe","work_site","driving","hobby","other"], "other"),
+      allowed(result.location_type, ["eatery","work_site","vehicle","outdoor","home","unknown"], "unknown"),
+      allowed(result.companion_type, ["solo","pair","group","unknown"], "unknown"),
+      allowed(result.price_range, ["under_1k","1k_to_3k","over_3k","none"], "none"),
+      allowed(result.interest_tag, ["noodle_craft","car_maintenance","heavy_work","sports_gear","none"], "none")
+    ).run();
+  } catch (err) {
+    console.error("D1 Insert Error:", err);
+    throw err;
+  }
+
+  if (webhook) {
+    await sendDiscordText(webhook, `**[${payload.aiName}]**\n${comment}`);
+  }
+}
+
+async function analyzeDeposit(payload, env, preview = false) {
+  const model = env.GEMINI_MODEL || "gemini-flash-latest";
   let recentContext = "";
   try {
     const { results } = await env.DB.prepare(
@@ -231,32 +292,16 @@ ${recentContext}
   "interest_tag": "noodle_craft | car_maintenance | heavy_work | sports_gear | none"
 }`;
 
-  const result = await callGemini(env.GEMINI_API_KEY, model, prompt, payload.images);
-  const comment = result.post_text || "記録しました。";
-
-  try {
-    await env.DB.prepare(
-      "INSERT INTO activity_records (user_id, post_text, discord_image_url, short_memo, category_major, category_minor, location_type, companion_type, price_range, interest_tag) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(
-      payload.userId,
-      comment,
-      imageUrls[0] || "",
-      payload.shortMemo,
-      allowed(result.category_major, ["food","life","scene"], "life"),
-      allowed(result.category_minor, ["ramen","meat","cafe","work_site","driving","hobby","other"], "other"),
-      allowed(result.location_type, ["eatery","work_site","vehicle","outdoor","home","unknown"], "unknown"),
-      allowed(result.companion_type, ["solo","pair","group","unknown"], "unknown"),
-      allowed(result.price_range, ["under_1k","1k_to_3k","over_3k","none"], "none"),
-      allowed(result.interest_tag, ["noodle_craft","car_maintenance","heavy_work","sports_gear","none"], "none")
-    ).run();
-  } catch (err) {
-    console.error("D1 Insert Error:", err);
-    throw err;
+  const result = await callGemini(env.GEMINI_API_KEY, model, prompt + (preview ? `
+上のJSONに以下も追加してください。
+- x_post_text: この出来事のX投稿下書き。呼びかけを含めず、本人の自然な投稿文として120〜130文字程度、最大130文字。ハッシュタグは0〜2個。情報が少なければ短くて構いません。創作で文字数を埋めないでください。
+- meal_report: 先頭の写真に食事がある場合だけ {"is_food":true,"meal_name":"料理名","estimated_calories_min":null,"estimated_calories_max":null,"ingredients":[],"nutrition_balance":"ざっくりバランス","comment":"一言"}。食事がなければnull。
+めしレポの対象は先頭1枚のみ。他の写真の料理を合算せず、量・材料・調理法が不明なら幅のある推定にし、算出できないカロリーは両端null。診断や断定はしないでください。
+` : ""), payload.images, preview);
+  if (preview && (typeof result.post_text !== "string" || !result.post_text.trim() || result.post_text.length > 2000)) {
+    throw new Error("Invalid preview comment");
   }
-
-  if (webhook) {
-    await sendDiscordText(webhook, `**[${payload.aiName}]**\n${comment}`);
-  }
+  return result;
 }
 
 function allowed(value, values, fallback) {
