@@ -168,15 +168,16 @@ export default {
           callName: String(payload.callName || "あなた").slice(0, 50),
           tone: String(payload.tone || "いつもの相棒").slice(0, 50),
           mood: String(payload.mood || "").slice(0, 100),
-          images
+          images, photoReports: payload.photoReports === true
         };
         if (!clean.userId) return json({ error: "userId is required" }, 400, headers);
 
         if (url.pathname === "/api/preview") {
           try {
-            const result = await analyzeDeposit(clean, env, true);
+            const result = clean.photoReports ? await analyzePhotos(clean, env) : await analyzeDeposit(clean, env, true);
             return json({
               status: "preview",
+              photo_reports: result.photo_reports,
               analysis: normalizeDepositAnalysis(result),
               x_post_text: normalizeXDraft(result.x_post_text),
               meal_report: result.category_major === "food" && result.meal_report?.is_food === true
@@ -195,7 +196,9 @@ export default {
           }
           try {
             // Save the exact reviewed text. No Gemini call on this path.
-            await handleBackgroundJob(clean, env, normalizeDepositAnalysis(review));
+            const normalized = normalizeDepositAnalysis(review);
+            if (clean.photoReports) normalized.photo_reports = validatePhotoReports(payload.photo_reports, clean.images.length);
+            await handleBackgroundJob(clean, env, normalized);
             return json({ status: "saved", message: "確認した内容を記録しました" }, 200, headers);
           } catch (err) {
             console.error("Reviewed deposit error:", err);
@@ -220,15 +223,17 @@ function json(data, status, headers) {
 async function handleBackgroundJob(payload, env, reviewedAnalysis = null) {
   const webhook = env.DISCORD_WEBHOOK_URL || "";
   let imageUrls = [];
+  const result = reviewedAnalysis || (payload.photoReports ? await analyzePhotos(payload, env) : normalizeDepositAnalysis(await analyzeDeposit(payload, env)));
 
   if (webhook) {
-    for (const image of payload.images) {
-      const url = await uploadToDiscord(webhook, image);
+    for (const [index, image] of payload.images.entries()) {
+      const report = result.photo_reports?.[index];
+      const url = await uploadToDiscord(webhook, image, report ? discordPhotoReport(report, index) : null);
+      if (report && !url) throw new Error("Discordへの写真・レポートの保管に失敗しました");
       if (url) imageUrls.push(url);
     }
   }
 
-  const result = reviewedAnalysis || normalizeDepositAnalysis(await analyzeDeposit(payload, env));
   const comment = result.post_text || "記録しました。";
 
   try {
@@ -304,11 +309,51 @@ ${recentContext}
   return result;
 }
 
+
+function validatePhotoReports(reports, count) {
+  if (!Array.isArray(reports) || reports.length !== count) throw new Error("写真ごとのレポートを確認してください");
+  return reports.map((r, index) => {
+    if (!r || r.photo_index !== index || typeof r.comment !== 'string' || !r.comment.trim() || r.comment.length > 2000 || typeof r.x_post_text !== 'string' || !r.x_post_text.trim() || r.x_post_text.length > 2000) throw new Error("写真とレポートの対応が不正です");
+    const meal = r.kind === 'meal' && r.meal_report && typeof r.meal_report === 'object' ? normalizeMealReport(r.meal_report) : null;
+    return { photo_index: index, kind: meal ? 'meal' : 'life', comment: r.comment,
+      x_post_text: r.x_post_text, meal_report: meal ? {...meal, image_scope:'this_photo'} : null,
+      life_report: meal ? null : String(r.life_report || r.comment).slice(0, 1000),
+      generated_at: typeof r.generated_at === 'string' && Number.isFinite(Date.parse(r.generated_at)) ? r.generated_at : new Date().toISOString() };
+  });
+}
+
+async function analyzePhotos(payload, env) {
+  const results = [];
+  for (const image of payload.images) {
+    // One image per request prevents cross-photo food attribution. Never sum calories.
+    results.push(await analyzeDeposit({...payload, images:[image]}, env, true));
+  }
+  const reports = results.map((r, index) => ({
+    photo_index:index, comment:r.post_text, x_post_text:normalizeXDraft(r.x_post_text) || normalizeXDraft(r.post_text),
+    kind:r.category_major === 'food' && r.meal_report?.is_food === true ? 'meal' : 'life',
+    meal_report:r.meal_report, life_report:r.post_text, generated_at:new Date().toISOString()
+  }));
+  return {...normalizeDepositAnalysis(results[0]),
+    post_text:results.map((r,i) => `写真${i+1}: ${r.post_text}`).join('\n').slice(0,2000),
+    photo_reports:validatePhotoReports(reports,payload.images.length)};
+}
+
+function discordPhotoReport(report, index) {
+  const meal = report.meal_report;
+  const calories = meal?.estimated_calories_min == null ? '推定カロリー：算出できませんでした' : `推定 約${meal.estimated_calories_min}〜${meal.estimated_calories_max} kcal`;
+  const fields = [{name:'X投稿用下書き（投稿前に確認）',value:report.x_post_text.slice(0,1024)}];
+  if (meal) fields.push(
+    {name:'めしレポ・' + calories,value:[meal.meal_name, meal.ingredients.join('・'), meal.nutrition_balance, meal.comment, meal.disclaimer, 'この写真だけの推定です。同じ料理の別写真を合算しないでください。'].filter(Boolean).join('\n').slice(0,1024)});
+  else fields.push({name:'ライフレポ',value:report.life_report.slice(0,1024)});
+  return {allowed_mentions:{parse:[]}, embeds:[{title:`写真${index+1}・${meal ? 'めしレポ' : 'ライフレポ'}`,description:report.comment,
+    fields, footer:{text:'AI生成・未確認の推定を含みます / '+report.generated_at}}]};
+}
+
 function allowed(value, values, fallback) {
   return values.includes(value) ? value : fallback;
 }
 
-async function uploadToDiscord(webhookUrl, dataUrl) {
+async function uploadToDiscord(webhookUrl, dataUrl, report = null) {
   try {
     const match = dataUrl.match(/^data:(image\/(?:jpeg|jpg|png|webp));base64,(.+)$/i);
     if (!match) return null;
@@ -318,6 +363,7 @@ async function uploadToDiscord(webhookUrl, dataUrl) {
 
     const form = new FormData();
     form.append("file", new Blob([binary], { type: mime }), `upload.${ext}`);
+    if (report) form.append("payload_json", JSON.stringify(report));
     const separator = webhookUrl.includes("?") ? "&" : "?";
     const res = await fetch(webhookUrl + separator + "wait=true", { method: "POST", body: form });
     if (!res.ok) throw new Error(`Discord upload failed: ${res.status}`);

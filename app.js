@@ -159,7 +159,7 @@ function invalidateReview() {
 
 function depositPayload() {
   return {
-    images: [...imagesData],
+    images: [...imagesData], photoReports: true,
     shortMemo: document.getElementById("shortMemoInput").value.trim(),
     userId, aiName, callName: userCall,
     tone: selectedTone, mood: selectedMood
@@ -206,7 +206,7 @@ async function generatePro() {
     if (!res.ok || typeof data.analysis?.post_text !== "string" || !data.analysis.post_text.trim()) {
       throw new Error(data.error || "コメントを生成できませんでした");
     }
-    pendingReview = { payload, analysis: data.analysis };
+    pendingReview = { payload, analysis: data.analysis, photo_reports: data.photo_reports };
     renderDepositReview(data);
   } catch (err) {
     showToast("生成エラー：" + err.message, true);
@@ -254,7 +254,7 @@ function renderDepositReview(data) {
     try {
       const res = await fetch(`${RELAY_SERVER_URL}/api/deposit-reviewed`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...pendingReview.payload, confirmed: true,
+        body: JSON.stringify({ ...pendingReview.payload, confirmed: true, photo_reports: pendingReview.photo_reports,
           reviewedAnalysis: { ...pendingReview.analysis, post_text: comment.value } })
       });
       const result = await safeJson(res);
@@ -280,7 +280,33 @@ function renderDepositReview(data) {
     }
   });
   area.append(status, label, comment, confirm, cancel);
-  if (data.analysis.category_major === "food" && data.meal_report) {
+  if (data.photo_reports) {
+    data.photo_reports.forEach((report, index) => {
+      const card = document.createElement('section');
+      card.className = 'card';
+      const title = document.createElement('h3');
+      title.textContent = `写真${index + 1}・${report.kind === 'meal' ? 'めしレポ' : 'ライフレポ'}`;
+      const photo = document.createElement('img');
+      photo.src = pendingReview.payload.images[index];
+      photo.alt = `写真${index + 1}`;
+      photo.style.cssText = 'width:100%;max-height:220px;object-fit:contain';
+      const text = document.createElement('p');
+      text.textContent = report.comment;
+      card.append(title, photo, text);
+      if (report.meal_report) renderMealReport(card, report.meal_report, true);
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = '𝕏 投稿文を確認する（任意）';
+      details.append(summary);
+      renderXDraft(details, report.x_post_text, value => {report.x_post_text = value;});
+      card.append(details);
+      area.append(card);
+    });
+    const note = document.createElement('p');
+    note.textContent = '預けると写真・レポート・X下書きをDiscordへ保管します。保存後の編集はDiscordに反映されません。カロリーは合算しません。';
+    area.append(note);
+  }
+  if (!data.photo_reports && data.analysis.category_major === "food" && data.meal_report) {
     const details = document.createElement("details");
     const summary = document.createElement("summary");
     summary.textContent = "🍽️ めしレポを見る";
@@ -288,7 +314,7 @@ function renderDepositReview(data) {
     renderMealReport(details, data.meal_report, true);
     area.appendChild(details);
   }
-  if (data.x_post_text) {
+  if (!data.photo_reports && data.x_post_text) {
     const details = document.createElement("details");
     const summary = document.createElement("summary");
     summary.textContent = "𝕏 投稿文を確認する（任意）";
@@ -577,7 +603,7 @@ function renderMealReport(area, report, preview = false) {
     box.appendChild(comment);
   }
   const note = document.createElement("div");
-  note.textContent = `${preview ? "選択した" : "保存された"}先頭の写真1枚が対象です。写真からの概算で、実際の量・材料・調理法により変わります。`;
+  note.textContent = `${report.image_scope === "this_photo" ? "この写真が対象です。" : (preview ? "選択した" : "保存された") + "先頭の写真1枚が対象です。"}写真からの概算で、実際の量・材料・調理法により変わります。`;
   note.style.cssText = "font-size:.72rem;color:#94a3b8;margin-top:6px";
   box.appendChild(note);
   area.appendChild(box);

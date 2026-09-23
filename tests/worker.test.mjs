@@ -318,3 +318,39 @@ for (const ai of [{}, { post_text: [] }, { post_text: ' ' }]) {
     assert.equal(s.rows.length, 0);
   });
 }
+
+test('three photo reports stay ordered and are archived with each image without new DB columns', async t => {
+ const s = setup(t, {rows:[], ai:previewAnalysis});
+ const payload = {userId:'alice',images:[photo,photo,photo],photoReports:true};
+ const preview = await (await s.request('/api/preview',payload)).json();
+ assert.equal(preview.photo_reports.length,3);
+ assert.equal(s.calls.length,3);
+ assert.equal(s.rows.length,0);
+ preview.photo_reports[1].x_post_text='編集した2枚目の下書き';
+ const res=await s.request('/api/deposit-reviewed',{...payload,confirmed:true,reviewedAnalysis:preview.analysis,photo_reports:preview.photo_reports});
+ assert.equal(res.status,200);
+ const uploads=s.calls.filter(x=>x.init.body instanceof FormData);
+ assert.equal(uploads.length,3);
+ uploads.forEach((x,i)=>{
+  const msg=JSON.parse(x.init.body.get('payload_json'));
+  assert.match(msg.embeds[0].title,new RegExp('写真'+(i+1)));
+  assert.equal(msg.allowed_mentions.parse.length,0);
+ });
+ assert.equal(JSON.parse(uploads[1].init.body.get('payload_json')).embeds[0].fields[0].value,'編集した2枚目の下書き');
+ assert.equal(s.calls.filter(x=>x.url.includes('generativelanguage')).length,3);
+ assert.equal(s.rows.length,1);
+ assert.equal(s.statements.filter(x=>x.sql.startsWith('INSERT')).length,1);
+});
+test('nonfood photos receive life reports without calorie estimates',async t=>{
+ const s=setup(t,{rows:[],ai:{...previewAnalysis,category_major:'scene'}});
+ const data=await(await s.request('/api/preview',{userId:'alice',images:[photo],photoReports:true})).json();
+ assert.equal(data.photo_reports[0].kind,'life');
+ assert.equal(data.photo_reports[0].meal_report,null);
+});
+test('missing or reordered photo reports cannot be saved',async t=>{
+ const s=setup(t,{rows:[]});
+ const res=await s.request('/api/deposit-reviewed',{userId:'alice',images:[photo],photoReports:true,confirmed:true,reviewedAnalysis:previewAnalysis,photo_reports:[]});
+ assert.notEqual(res.status,200);
+ assert.equal(s.calls.length,0);
+ assert.equal(s.rows.length,0);
+});

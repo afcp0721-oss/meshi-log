@@ -9,6 +9,7 @@ const { resolve } = require('node:path');
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
+    let perPhoto = false;
     let assists = 0;
     let failNext = false;
     let previewCalls = 0;
@@ -32,6 +33,7 @@ const { resolve } = require('node:path');
       }
       if (url.pathname === '/api/preview') {
         previewCalls++;
+        if (perPhoto) return route.fulfill({json:{status:'preview',analysis:{post_text:'3枚の記録',category_major:'food'},photo_reports:[0,1,2].map(i=>({photo_index:i,kind:i===1?'life':'meal',comment:'写真'+(i+1)+'のコメント',x_post_text:'写真'+(i+1)+'のX下書き',life_report:i===1?'日常の記録':null,meal_report:i===1?null:{meal_name:'食事',estimated_calories_min:500,estimated_calories_max:700,image_scope:'this_photo'}}))}});
         if (failPreview) { failPreview = false; return route.fulfill({ status: 502, json: { error: '生成を再試行してください' } }); }
         return route.fulfill({ json: { status: 'preview', analysis: { post_text: 'AIの確認用コメント', category_major: 'food' }, x_post_text: 'X用の下書き', meal_report: { meal_name: '昼ごはん', estimated_calories_min: 500, estimated_calories_max: 700 } } });
       }
@@ -154,6 +156,23 @@ const { resolve } = require('node:path');
     assert.equal(quickPayload.reviewedAnalysis, undefined);
     assert.equal(await page.getByRole('link', { name: '𝕏 でポスト' }).count(), 0);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    perPhoto = true;
+    await page.locator('#fileInput').setInputFiles([file, {...file,name:'second.png'}, {...file,name:'third.png'}]);
+    await page.waitForFunction(() => !document.getElementById('btnProGenerate').disabled);
+    await page.getByRole('button',{name:'確認して預ける',exact:true}).click();
+    await page.getByText('写真2・ライフレポ',{exact:true}).waitFor();
+    assert.equal(await page.locator('#resultArea section').count(),3);
+    const card = page.locator('#resultArea section').nth(1);
+    await card.locator('summary').click();
+    await card.getByRole('textbox').fill('2枚目を編集');
+    assert.equal(await card.getByRole('link').getAttribute('href'),null);
+    await card.getByRole('checkbox').check();
+    assert.match(await card.getByRole('link').getAttribute('href'), /intent/);
+    await page.getByRole('button',{name:'この内容で預ける'}).click();
+    await page.getByText('確認したコメントで記録しました。',{exact:false}).waitFor();
+    assert.equal(reviewedPayload.photo_reports.length,3);
+    assert.equal(reviewedPayload.photo_reports[1].x_post_text,'2枚目を編集');
+    assert.equal(reviewedPayload.photoReports,true);
     assert.deepEqual(errors, []);
     console.log('PASS quick deposit, preview/edit/save/cancel/retry, stale review invalidation, X confirmation/reset, history, meal report, mobile layout');
   } finally { await browser.close(); }
