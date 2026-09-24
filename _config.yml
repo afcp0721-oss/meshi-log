@@ -1,0 +1,17 @@
+# Only browser assets belong on Pages. Backend source remains in GitHub until repository privacy is changed.
+exclude:
+  - worker.js
+  - analysis.mjs
+  - wrangler.jsonc
+  - wrangler.staging.jsonc
+  - backup
+  - docs
+  - tests
+  - staging
+  - scripts
+  - .github
+  - .cloudflare-build-trigger
+  - PRIVATE-MIGRATION.md
+  - SECURITY-SETUP.md
+  - "**/*.mjs"
+  - "**/*.jsonc"
