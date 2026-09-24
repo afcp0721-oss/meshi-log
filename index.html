@@ -129,6 +129,14 @@
 
       <button class="btn-main" onclick="saveSettings()">設定を保存する</button>
 
+      <section aria-label="友だちに紹介する" style="margin-top:24px; border-top:1px solid #475569; padding-top:16px;">
+        <div style="font-weight:bold;">友だちに紹介する</div>
+        <p class="desc">写真を預けるだけで、日常を記録。アプリのリンクを共有できます。</p>
+        <input id="appShareUrl" aria-label="紹介用URL" type="url" readonly value="https://afcp0721-oss.github.io/meshi-log/" onclick="this.select()">
+        <button class="btn-sub" onclick="shareApp()">アプリを共有する</button>
+        <button class="btn-sub" onclick="copyAppUrl()">URLをコピー</button>
+        <p id="appShareStatus" role="status" style="font-size:0.85rem;"></p>
+      </section>
       <button class="btn-sub" onclick="closeSettings()">閉じる</button>
     </div>
 
@@ -209,6 +217,6 @@
   </div>
 
   <!-- スクリプト読み込み（キャッシュ対策 v=4） -->
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

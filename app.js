@@ -353,6 +353,33 @@ function openSettings() {
   document.getElementById("settingsCard").style.display = "block";
   document.getElementById("mainCard").style.display = "none";
 }
+const APP_SHARE_URL = "https://afcp0721-oss.github.io/meshi-log/";
+
+async function copyAppUrl() {
+  const status = document.getElementById("appShareStatus");
+  try {
+    await navigator.clipboard.writeText(APP_SHARE_URL);
+    status.textContent = "URLをコピーしました。LINEなどに貼り付けて紹介できます。";
+  } catch {
+    const field = document.getElementById("appShareUrl");
+    field.focus();
+    field.select();
+    field.setSelectionRange(0, field.value.length);
+    status.textContent = "URLを長押ししてコピーしてください。";
+  }
+}
+
+async function shareApp() {
+  const status = document.getElementById("appShareStatus");
+  status.textContent = "";
+  if (!navigator.share) return copyAppUrl();
+  try {
+    await navigator.share({ title: "めしログ＆ライフログ", url: APP_SHARE_URL });
+  } catch (error) {
+    if (error.name !== "AbortError") await copyAppUrl();
+  }
+}
+
 function closeSettings() {
   document.getElementById("settingsCard").style.display = "none";
   document.getElementById("mainCard").style.display = "block";
