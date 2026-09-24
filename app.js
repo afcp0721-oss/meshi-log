@@ -238,6 +238,9 @@ function renderDepositReview(data) {
   confirm.type = "button";
   confirm.className = "btn-main";
   confirm.textContent = "この内容で預ける";
+  const saveFeedback = document.createElement("p");
+  saveFeedback.setAttribute("role", "alert");
+  saveFeedback.style.cssText = "color:#fca5a5;line-height:1.6;margin:8px 0";
   const cancel = document.createElement("button");
   cancel.type = "button";
   cancel.className = "btn-sub";
@@ -251,6 +254,7 @@ function renderDepositReview(data) {
     cancel.disabled = true;
     comment.disabled = true;
     confirm.textContent = "保存中…";
+    saveFeedback.textContent = "";
     renderGrid();
     try {
       const res = await fetch(`${RELAY_SERVER_URL}/api/deposit-reviewed`, {
@@ -270,7 +274,9 @@ function renderDepositReview(data) {
       comment.readOnly = true;
       showToast("確認した内容で預けました。");
     } catch (err) {
-      status.textContent = "保存エラー：" + err.message;
+      status.textContent = "保存に失敗しました。ボタン下の案内を確認してください。";
+      saveFeedback.textContent = "保存エラー：" + err.message;
+      saveFeedback.scrollIntoView({block:"center", behavior:"smooth"});
       confirm.disabled = false;
       cancel.disabled = false;
       comment.disabled = false;
@@ -280,7 +286,7 @@ function renderDepositReview(data) {
       renderGrid();
     }
   });
-  area.append(status, label, comment, confirm, cancel);
+  area.append(status, label, comment, confirm, saveFeedback, cancel);
   if (data.photo_reports) {
     data.photo_reports.forEach((report, index) => {
       const card = document.createElement('section');

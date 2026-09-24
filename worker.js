@@ -203,7 +203,7 @@ export default {
             return json({ status: "saved", message: "確認した内容を記録しました" }, 200, headers);
           } catch (err) {
             console.error("Reviewed deposit error:", err);
-            return json({ error: "保存を確認できませんでした。過去ログを確認してから再試行してください。" }, 500, headers);
+            return json({ error: err.publicMessage || "保存を確認できませんでした。過去ログを確認してから再試行してください。" }, 500, headers);
           }
         }
         ctx.waitUntil(handleBackgroundJob(clean, env));
@@ -219,6 +219,12 @@ export default {
 
 function json(data, status, headers) {
   return new Response(JSON.stringify(data), { status, headers });
+}
+
+function saveError(message) {
+  const error = new Error("Save failed");
+  error.publicMessage = message;
+  return error;
 }
 
 function validateDiscordWebhook(value) {
@@ -260,8 +266,8 @@ async function handleBackgroundJob(payload, env, reviewedAnalysis = null) {
       allowed(result.interest_tag, ["noodle_craft","car_maintenance","heavy_work","sports_gear","none"], "none")
     ).run();
   } catch (err) {
-    console.error("D1 Insert Error:", err);
-    throw err;
+    console.error("D1 Insert Error");
+    throw saveError("Discordへ写真を送りましたが、履歴DBへの保存に失敗しました。再送前にDiscordと過去ログを確認してください。");
   }
 
   if (webhook) {
@@ -374,12 +380,23 @@ async function uploadToDiscord(webhookUrl, dataUrl, report = null) {
     if (report) form.append("payload_json", JSON.stringify(report));
     const separator = webhookUrl.includes("?") ? "&" : "?";
     const res = await fetch(webhookUrl + separator + "wait=true", { method: "POST", body: form, redirect: "error" });
-    if (!res.ok) throw new Error(`Discord upload failed: ${res.status}`);
+    if (!res.ok) {
+      const reason = ({
+        401: "保存先URLが無効です。設定に新しいウェブフックURLを保存してください。",
+        403: "保存先への投稿が拒否されました。Discordのウェブフック設定を確認してください。",
+        404: "保存先が見つかりません。削除済み・不正なウェブフックURLではないか確認してください。",
+        413: "写真が送信可能なサイズを超えています。写真を減らして試してください。",
+        429: "Discordの送信制限に達しました。少し待ってから確認してください。",
+        400: "Discordが写真・レポートを受け付けませんでした。"
+      })[res.status] || "Discordへの送信に失敗しました。";
+      throw saveError(reason + `（Discord ${res.status}）一部届いている場合があるので、再送前に保存先を確認してください。`);
+    }
     const data = await res.json();
-    return data.attachments?.[0]?.url || null;
+    if (!data.attachments?.[0]?.url) throw saveError("Discordから写真の保存結果を取得できませんでした。再送前に保存先を確認してください。");
+    return data.attachments[0].url;
   } catch (err) {
     console.error("Discord Upload Error");
-    return null;
+    throw err.publicMessage ? err : saveError("Discordとの通信でエラーが起きました。再送前に保存先を確認してください。");
   }
 }
 
