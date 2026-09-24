@@ -37,6 +37,7 @@ function setup(t, options = {}) {
       return new Response('image bytes', { status: options.imageStatus || 200, headers: { 'Content-Type': options.imageType || 'image/jpeg' } });
     }
     if (String(url).startsWith(env.DISCORD_WEBHOOK_URL) || String(url).startsWith('https://discord.com/api/webhooks/123/personal')) {
+      if (options.discordStatus) return Response.json({message:'secret must not be exposed'}, {status:options.discordStatus});
       return Response.json({ attachments: [{ url: record.discord_image_url }] });
     }
     throw new Error(`Unexpected fetch ${url}`);
@@ -185,7 +186,7 @@ test('profile entry excludes unknown traits and nonfood nutrition', () => {
 test('D1 insert failure rejects the background job instead of reporting saved success', async t => {
   const s = setup(t, { dbFailure: true });
   assert.equal((await s.request('/', { userId: 'alice', images: [photo] })).status, 202);
-  await assert.rejects(s.jobs[0], /database unavailable/);
+  await assert.rejects(s.jobs[0], /Save failed/);
   assert.equal(s.rows.length, 1);
 });
 
@@ -376,3 +377,15 @@ test('personal destination overrides shared webhook for photos and summary', asy
   assert(calls.every(c=>c.init.redirect==='error'));
   assert.equal(s.rows.length,1);
 });
+
+for (const code of [400,401,403,404,413,429,500]) {
+  test('reviewed Discord failure is actionable without leaking secrets: '+code,async t=>{
+    const s=setup(t,{discordStatus:code,rows:[]});
+    const res=await s.request('/api/deposit-reviewed',{userId:'alice',images:[photo],confirmed:true,reviewedAnalysis:{post_text:'test'}});
+    assert.equal(res.status,500);
+    const body=await res.json();
+    assert(body.error.includes('Discord '+code));
+    assert(!body.error.includes('secret'));
+    assert.equal(s.rows.length,0);
+  });
+}
