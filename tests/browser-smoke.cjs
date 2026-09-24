@@ -7,6 +7,7 @@ const { resolve } = require('node:path');
   const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await page.addInitScript(() => sessionStorage.setItem('meshi_invite_token', 'browser-test-token'.padEnd(40, '_')));
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     let perPhoto = false;

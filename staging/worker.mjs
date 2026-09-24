@@ -24,9 +24,12 @@ export default {
     if (request.method === 'GET' && url.pathname === '/') {
       response = new Response(html.replace('<body>', '<body><div style="position:fixed;bottom:0;left:0;right:0;background:#713f12;padding:6px;text-align:center;z-index:9999">テスト環境・本番とは別の記録です</div>'), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     } else if (request.method === 'GET' && url.pathname === '/app.js') {
-      response = new Response(script.replace('"https://icy-silence-6539.afcp0721.workers.dev"', 'location.origin').replaceAll('meshi_', 'meshi_staging_'), { headers: { 'Content-Type': 'application/javascript; charset=utf-8' } });
+      response = new Response(script.replace('"https://icy-silence-6539.afcp0721.workers.dev"', 'location.origin').replaceAll('meshi_', 'meshi_staging_').replaceAll('Authorization', 'X-Meshi-Invite'), { headers: { 'Content-Type': 'application/javascript; charset=utf-8' } });
     } else {
-      response = await app.fetch(request, env, ctx);
+      const forwardedHeaders = new Headers(request.headers);
+      forwardedHeaders.set("Authorization", request.headers.get("X-Meshi-Invite") || "");
+      forwardedHeaders.delete("X-Meshi-Invite");
+      response = await app.fetch(new Request(request, {headers:forwardedHeaders}), env, ctx);
     }
     const secured = new Response(response.body, response);
     secured.headers.set('Cache-Control', 'no-store');

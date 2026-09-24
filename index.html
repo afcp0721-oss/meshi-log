@@ -104,6 +104,15 @@
       <div class="desc">いつでも変更できます。</div>
       <p style="margin:12px 0"><a href="https://afcp0721-oss.github.io/meshi-log/guide.html" target="_blank" rel="noopener noreferrer" style="color:#fdba74">📖 はじめての方へ・特徴と使い方 ↗</a></p>
 
+      <section aria-label="招待コードでログイン">
+        <label for="inviteCodeInput">身内テストの招待コード</label>
+        <input type="password" id="inviteCodeInput" autocomplete="off" spellcheck="false" autocapitalize="none" style="width:100%;padding:10px;background:#0f172a;color:white;border:1px solid #475569;border-radius:8px">
+        <button class="btn-sub" id="inviteLoginButton" onclick="loginInvite()">招待コードでログイン</button>
+        <button class="btn-sub" onclick="logoutInvite()">ログアウト</button>
+        <p id="inviteLoginStatus" role="status"></p>
+        <p class="desc">招待コードは運営者から個別に受け取ってください。このタブを閉じると再入力が必要です。コードは他人に渡さないでください。</p>
+        <details><summary>以前の記録を引き継ぐ方へ</summary><p>初回ログイン前に、この記録IDを運営者へ伝えてください。運営者が招待コードと対応付けます。</p><code id="existingUserId"></code><p>新しいスマホでは、対応付け済みの同じ招待コードを使います。呼び名・Discord保存先は再設定してください。</p></details>
+      </section>
       <label>あなたの呼ばれ方（必須）</label>
       <input type="text" id="userCallInput" placeholder="例：ボス, ニックネーム" value="ニックネーム">
       <div class="chip-wrap">
@@ -235,6 +244,6 @@
   </div>
 
   <!-- スクリプト読み込み（キャッシュ対策 v=4） -->
-  <script src="app.js?v=15"></script>
+  <script src="app.js?v=16"></script>
 </body>
 </html>
