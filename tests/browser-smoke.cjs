@@ -221,6 +221,11 @@ const { resolve } = require('node:path');
     await page.getByRole('button',{name:'📖 過去ログ'}).click();
     await page.getByRole('button',{name:'🍽️ めしレポ'}).waitFor();
     assert.equal(mailCalls,1);
+    await page.evaluate(async()=>{await meshiAuth.reset('https://api.test','tester@example.test')});
+    assert.equal(mailCalls,2);
+    const cooldown=await page.evaluate(async()=>{try{await meshiAuth.resend('https://api.test')}catch(e){return e.message}});
+    assert.match(cooldown,/1分/);
+    assert.equal(mailCalls,2);
     assert.deepEqual(errors, []);
     console.log('PASS quick deposit, preview/edit/save/cancel/retry, stale review invalidation, X confirmation/reset, history, meal report, mobile layout');
   } finally { await browser.close(); }

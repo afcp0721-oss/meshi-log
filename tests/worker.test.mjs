@@ -474,7 +474,9 @@ test('preview and history AI share five calls; save/read remain available at cap
  const s=setup(t,{ai:{x_post_text:'今日の記録',post_text:'昼食',category_major:'food'}});
  for(let i=0;i<5;i++) assert.equal((await s.request('/api/assist',assist('x_post'))).status,200);
  const before=s.calls.length;
- assert.equal((await s.request('/api/preview',{userId:'alice',images:[photo],discordWebhook:''})).status,429);
+ assert.equal((await s.request('/api/preview',{userId:'alice',images:[photo],discordWebhookUrl:''})).status,429);
+ assert.equal(s.calls.length,before);
+ assert.equal((await s.request('/api/deposit-reviewed',{userId:'alice',images:[photo],discordWebhookUrl:'',confirmed:true,reviewedAnalysis:{post_text:'保存だけ'}})).status,200);
  assert.equal(s.calls.length,before);
  assert.equal((await s.request('/api/logs?userId=alice')).status,200);
  assert.equal((await (await s.request('/api/quota')).json()).remaining,0);

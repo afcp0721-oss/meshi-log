@@ -1,1 +1,1 @@
-// Invite-code generation was retired in favor of managed phone authentication.
+// Invite-code generation was retired in favor of verified email authentication.

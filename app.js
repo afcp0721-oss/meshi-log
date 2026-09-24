@@ -707,7 +707,7 @@ async function apiFetch(url, options = {}) {
 let authBusy = false;
 async function updateQuota(headers) {
   try {
-    const response = await fetch(`${RELAY_SERVER_URL}/api/quota`, {headers});
+    const response = await fetch(`${RELAY_SERVER_URL}/api/quota`, {headers, signal: AbortSignal.timeout(3000)});
     if (!response.ok) return;
     const quota = await response.json();
     document.getElementById("quotaStatus").textContent = `本日のAI生成：残り${quota.remaining}回 / ${quota.limit}回（日本時間0時にリセット）`;
