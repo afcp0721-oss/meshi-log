@@ -36,7 +36,7 @@ function setup(t, options = {}) {
     if (String(url).startsWith('https://cdn.discordapp.com')) {
       return new Response('image bytes', { status: options.imageStatus || 200, headers: { 'Content-Type': options.imageType || 'image/jpeg' } });
     }
-    if (String(url).startsWith(env.DISCORD_WEBHOOK_URL)) {
+    if (String(url).startsWith(env.DISCORD_WEBHOOK_URL) || String(url).startsWith('https://discord.com/api/webhooks/123/personal')) {
       return Response.json({ attachments: [{ url: record.discord_image_url }] });
     }
     throw new Error(`Unexpected fetch ${url}`);
@@ -353,4 +353,26 @@ test('missing or reordered photo reports cannot be saved',async t=>{
  assert.notEqual(res.status,200);
  assert.equal(s.calls.length,0);
  assert.equal(s.rows.length,0);
+});
+
+for (const url of ['', 'https://evil.example/api/webhooks/123/token', 'https://discord.com.evil.example/api/webhooks/123/token', 'http://discord.com/api/webhooks/123/token', 'https://discord.com/api/webhooks/123/token?url=evil', 'https://discord.com/api/webhooks/123/token/../other']) {
+  test('reject unsafe or blank personal Discord destination: ' + url, async t => {
+    const s = setup(t);
+    const res = await s.request('/', {userId:'alice', images:[photo], discordWebhookUrl:url});
+    assert.equal(res.status,400);
+    assert.equal(s.calls.length,0);
+    assert.equal(s.jobs.length,0);
+  });
+}
+test('personal destination overrides shared webhook for photos and summary', async t => {
+  const s=setup(t,{rows:[],ai:{post_text:'記録',category_major:'life'}});
+  const url='https://discord.com/api/webhooks/123/personal';
+  const res=await s.request('/',{userId:'alice',images:[photo,photo],discordWebhookUrl:url});
+  assert.equal(res.status,202);
+  await Promise.all(s.jobs);
+  const calls=s.calls.filter(c=>c.url.includes('discord.com/api/webhooks'));
+  assert.equal(calls.length,3);
+  assert(calls.every(c=>c.url===url || c.url===url+'?wait=true'));
+  assert(calls.every(c=>c.init.redirect==='error'));
+  assert.equal(s.rows.length,1);
 });

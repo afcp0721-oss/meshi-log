@@ -168,7 +168,8 @@ export default {
           callName: String(payload.callName || "あなた").slice(0, 50),
           tone: String(payload.tone || "いつもの相棒").slice(0, 50),
           mood: String(payload.mood || "").slice(0, 100),
-          images, photoReports: payload.photoReports === true
+          images, photoReports: payload.photoReports === true,
+          discordWebhookUrl: Object.hasOwn(payload, "discordWebhookUrl") ? validateDiscordWebhook(payload.discordWebhookUrl) : undefined
         };
         if (!clean.userId) return json({ error: "userId is required" }, 400, headers);
 
@@ -220,8 +221,15 @@ function json(data, status, headers) {
   return new Response(JSON.stringify(data), { status, headers });
 }
 
+function validateDiscordWebhook(value) {
+  if (typeof value !== "string" || !/^https:\/\/discord\.com\/api\/webhooks\/[0-9]+\/[A-Za-z0-9_-]+$/.test(value.trim())) {
+    throw new Error("設定にDiscordのウェブフックURLを保存してください。discord.comのURLが必要です。");
+  }
+  return value.trim();
+}
+
 async function handleBackgroundJob(payload, env, reviewedAnalysis = null) {
-  const webhook = env.DISCORD_WEBHOOK_URL || "";
+  const webhook = payload.discordWebhookUrl ?? env.DISCORD_WEBHOOK_URL ?? "";
   let imageUrls = [];
   const result = reviewedAnalysis || (payload.photoReports ? await analyzePhotos(payload, env) : normalizeDepositAnalysis(await analyzeDeposit(payload, env)));
 
@@ -229,7 +237,7 @@ async function handleBackgroundJob(payload, env, reviewedAnalysis = null) {
     for (const [index, image] of payload.images.entries()) {
       const report = result.photo_reports?.[index];
       const url = await uploadToDiscord(webhook, image, report ? discordPhotoReport(report, index) : null);
-      if (report && !url) throw new Error("Discordへの写真・レポートの保管に失敗しました");
+      if ((report || payload.discordWebhookUrl) && !url) throw new Error("Discordへの写真・レポートの保管に失敗しました");
       if (url) imageUrls.push(url);
     }
   }
@@ -365,12 +373,12 @@ async function uploadToDiscord(webhookUrl, dataUrl, report = null) {
     form.append("file", new Blob([binary], { type: mime }), `upload.${ext}`);
     if (report) form.append("payload_json", JSON.stringify(report));
     const separator = webhookUrl.includes("?") ? "&" : "?";
-    const res = await fetch(webhookUrl + separator + "wait=true", { method: "POST", body: form });
+    const res = await fetch(webhookUrl + separator + "wait=true", { method: "POST", body: form, redirect: "error" });
     if (!res.ok) throw new Error(`Discord upload failed: ${res.status}`);
     const data = await res.json();
     return data.attachments?.[0]?.url || null;
   } catch (err) {
-    console.error("Discord Upload Error:", err);
+    console.error("Discord Upload Error");
     return null;
   }
 }
@@ -379,12 +387,13 @@ async function sendDiscordText(webhookUrl, content) {
   try {
     const res = await fetch(webhookUrl, {
       method: "POST",
+      redirect: "error",
       headers: JSON_HEADERS,
-      body: JSON.stringify({ content })
+      body: JSON.stringify({ content, allowed_mentions: { parse: [] } })
     });
     if (!res.ok) console.error("Discord text failed:", res.status);
   } catch (err) {
-    console.error("Discord Text Error:", err);
+    console.error("Discord Text Error");
   }
 }
 

@@ -160,6 +160,7 @@ function invalidateReview() {
 function depositPayload() {
   return {
     images: [...imagesData], photoReports: true,
+    discordWebhookUrl: localStorage.getItem("meshi_discord_webhook") || "",
     shortMemo: document.getElementById("shortMemoInput").value.trim(),
     userId, aiName, callName: userCall,
     tone: selectedTone, mood: selectedMood
@@ -350,6 +351,7 @@ function openSettings() {
   document.getElementById("userCallInput").value = userCall;
   document.getElementById("aiNameInput").value = aiName;
   document.getElementById("myPhraseInput").value = myPhrase;
+  document.getElementById("discordInput").value = localStorage.getItem("meshi_discord_webhook") || "";
   document.getElementById("settingsCard").style.display = "block";
   document.getElementById("mainCard").style.display = "none";
 }
@@ -389,6 +391,13 @@ function setAiName(v) { document.getElementById("aiNameInput").value = v; }
 function setPhrase(v) { document.getElementById("myPhraseInput").value = v; }
 
 async function saveSettings() {
+  const webhook = document.getElementById("discordInput").value.trim();
+  if (webhook && !/^https:\/\/discord\.com\/api\/webhooks\/[0-9]+\/[A-Za-z0-9_-]+$/.test(webhook)) {
+    showToast("DiscordのウェブフックURLを確認してください");
+    return;
+  }
+  if (webhook) localStorage.setItem("meshi_discord_webhook", webhook);
+  else localStorage.removeItem("meshi_discord_webhook");
   invalidateReview();
   userCall = document.getElementById("userCallInput").value.trim() || "ニックネーム";
   aiName = document.getElementById("aiNameInput").value.trim() || "ログアシスタント";

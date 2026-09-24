@@ -127,6 +127,22 @@
   <span class="chip" onclick="setPhrase('優勝！')">優勝！</span>
 </div>
 
+      <label for="discordInput">Discordの保存先（ウェブフックURL）</label>
+      <input type="password" id="discordInput" placeholder="https://discord.com/api/webhooks/..." autocomplete="off" spellcheck="false" autocapitalize="none">
+      <p class="desc">写真・レポートを自分のDiscordへ保存します。URLはこの端末のブラウザに保存され、記録時に送信処理のためサーバーへ渡します。未設定では預けられません。</p>
+      <details style="margin:12px 0; line-height:1.7;">
+        <summary>Discordの登録・URLの取得方法</summary>
+        <ol style="padding-left:22px;">
+          <li><a href="https://discord.com/register" target="_blank" rel="noopener noreferrer">Discordに登録</a>、またはログインします。</li>
+          <li>自分用のサーバーと、写真を保存するテキストチャンネルを作ります。</li>
+          <li>サーバー設定の「連携サービス」→「ウェブフック」→「新しいウェブフック」を開きます。</li>
+          <li>保存先チャンネルを選び、「ウェブフックURLをコピー」します。</li>
+          <li>上の欄に貼り付け、「設定を保存する」を押します。</li>
+        </ol>
+        <p>項目が見つからない場合はPC版Discordで操作し、ウェブフックを管理する権限を確認してください。</p>
+        <p>URLを知っている人はそのチャンネルへ投稿できます。他人に共有しないでください。友だちには下のアプリ紹介URLを送ります。</p>
+        <a href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks" target="_blank" rel="noopener noreferrer">Discord公式の手順</a>
+      </details>
       <button class="btn-main" onclick="saveSettings()">設定を保存する</button>
 
       <section aria-label="友だちに紹介する" style="margin-top:24px; border-top:1px solid #475569; padding-top:16px;">
@@ -217,6 +233,6 @@
   </div>
 
   <!-- スクリプト読み込み（キャッシュ対策 v=4） -->
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=14"></script>
 </body>
 </html>
