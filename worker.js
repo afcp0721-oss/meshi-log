@@ -38,7 +38,7 @@ export default {
         }
 
         const upstream = await fetch(target.toString(), {
-          redirect: "error",
+          redirect: "manual",
           headers: { "User-Agent": "MeshiLog/1.0" }
         });
         if (!upstream.ok) {
@@ -379,7 +379,7 @@ async function uploadToDiscord(webhookUrl, dataUrl, report = null) {
     form.append("file", new Blob([binary], { type: mime }), `upload.${ext}`);
     if (report) form.append("payload_json", JSON.stringify(report));
     const separator = webhookUrl.includes("?") ? "&" : "?";
-    const res = await fetch(webhookUrl + separator + "wait=true", { method: "POST", body: form, redirect: "error" });
+    const res = await fetch(webhookUrl + separator + "wait=true", { method: "POST", body: form, redirect: "manual" });
     if (!res.ok) {
       const reason = ({
         401: "保存先URLが無効です。設定に新しいウェブフックURLを保存してください。",
@@ -404,7 +404,7 @@ async function sendDiscordText(webhookUrl, content) {
   try {
     const res = await fetch(webhookUrl, {
       method: "POST",
-      redirect: "error",
+      redirect: "manual",
       headers: JSON_HEADERS,
       body: JSON.stringify({ content, allowed_mentions: { parse: [] } })
     });
@@ -459,7 +459,7 @@ async function discordImageToDataUrl(rawUrl) {
   try {
     const target = new URL(rawUrl);
     if (target.protocol !== "https:" || !isAllowedDiscordCdnHost(target.hostname)) return "";
-    const res = await fetch(target.toString(), { redirect: "error", headers: { "User-Agent": "MeshiLog/1.0" } });
+    const res = await fetch(target.toString(), { redirect: "manual", headers: { "User-Agent": "MeshiLog/1.0" } });
     if (!res.ok) return "";
     const contentType = (res.headers.get("Content-Type") || "").toLowerCase();
     if (!/^image\/(jpeg|png|webp)(;|$)/.test(contentType)) return "";
