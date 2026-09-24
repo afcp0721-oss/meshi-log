@@ -507,7 +507,7 @@ async function readBoundedJson(request) {
   } finally { reader.releaseLock(); }
   const bytes = new Uint8Array(size); let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-  return JSON.parse(new TextDecoder().decode(bytes));
+  try { return JSON.parse(new TextDecoder().decode(bytes)); } catch { const e = saveError("送信内容の形式が正しくありません"); e.httpStatus = 400; throw e; }
 }
 
 

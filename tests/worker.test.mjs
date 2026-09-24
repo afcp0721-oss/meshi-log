@@ -422,3 +422,10 @@ test('untrusted browser origin and oversized streaming body are rejected',async 
  const s=setup(t);assert.equal((await worker.fetch(new Request('https://worker.test/api/session',{headers:{Origin:'https://evil.test'}}),s.env,s.ctx)).status,403);
  const r=await worker.fetch(new Request('https://worker.test/api/preview',{method:'POST',headers:{Authorization:'Bearer '+'alice'.padEnd(40,'_')},body:'x'.repeat(12*1024*1024+1)}),s.env,s.ctx);assert.equal(r.status,413);assert.equal(s.calls.length,0);
 });
+
+test('expired invite is denied and valid session returns only canonical identity',async t=>{
+ const s=setup(t);const token='alice'.padEnd(40,'_');const req=()=>new Request('https://worker.test/api/session',{headers:{Authorization:'Bearer '+token}});
+ assert.deepEqual(await (await worker.fetch(req(),s.env,s.ctx)).json(),{userId:'alice'});
+ const users=JSON.parse(s.env.INVITE_USERS);users[createHash('sha256').update(token).digest('hex')].expiresAt='2000-01-01';s.env.INVITE_USERS=JSON.stringify(users);
+ assert.equal((await worker.fetch(req(),s.env,s.ctx)).status,401);
+});
