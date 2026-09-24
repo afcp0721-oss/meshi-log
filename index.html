@@ -128,9 +128,9 @@
   <span class="chip" onclick="setPhrase('優勝！')">優勝！</span>
 </div>
 
-      <label for="discordInput">Discordの保存先（ウェブフックURL）</label>
+      <label for="discordInput">Discordの保存先（任意・ウェブフックURL）</label>
       <input type="password" id="discordInput" placeholder="https://discord.com/api/webhooks/..." autocomplete="off" spellcheck="false" autocapitalize="none">
-      <p class="desc">写真・レポートを自分のDiscordへ保存します。URLはこの端末のブラウザに保存され、記録時に送信処理のためサーバーへ渡します。未設定では預けられません。</p>
+      <p class="desc">未設定でも「預ける」で記録コメントとメモをDBへ保存できます。写真・詳細レポート・X下書きも保管する場合はDiscordを設定してください。URLはこの端末に保存され、記録時に送信処理のためサーバーへ渡します。</p>
       <details style="margin:12px 0; line-height:1.7;">
         <summary>Discordの登録・URLの取得方法</summary>
         <ol style="padding-left:22px;">
@@ -235,6 +235,6 @@
   </div>
 
   <!-- スクリプト読み込み（キャッシュ対策 v=4） -->
-  <script src="app.js?v=15"></script>
+  <script src="app.js?v=18"></script>
 </body>
 </html>

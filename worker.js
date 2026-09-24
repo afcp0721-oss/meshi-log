@@ -228,6 +228,8 @@ function saveError(message) {
 }
 
 function validateDiscordWebhook(value) {
+  // Explicitly empty means text-only storage; do not fall back to the shared webhook.
+  if (typeof value === "string" && !value.trim()) return "";
   if (typeof value !== "string" || !/^https:\/\/discord\.com\/api\/webhooks\/[0-9]+\/[A-Za-z0-9_-]+$/.test(value.trim())) {
     throw new Error("設定にDiscordのウェブフックURLを保存してください。discord.comのURLが必要です。");
   }
@@ -267,7 +269,9 @@ async function handleBackgroundJob(payload, env, reviewedAnalysis = null) {
     ).run();
   } catch (err) {
     console.error("D1 Insert Error");
-    throw saveError("Discordへ写真を送りましたが、履歴DBへの保存に失敗しました。再送前にDiscordと過去ログを確認してください。");
+    throw saveError(webhook
+      ? "Discordへ写真を送りましたが、履歴DBへの保存に失敗しました。再送前にDiscordと過去ログを確認してください。"
+      : "履歴DBへの保存に失敗しました。過去ログを確認してから再試行してください。");
   }
 
   if (webhook) {
