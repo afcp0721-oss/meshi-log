@@ -28,6 +28,7 @@ function setup(t, options = {}) {
     } }; }
   } };
   t.mock.method(globalThis, 'fetch', async (url, init = {}) => {
+    if (init.redirect === 'error') throw new TypeError('Invalid redirect value, must be follow or manual');
     calls.push({ url: String(url), init });
     if (String(url).includes('generativelanguage')) {
       if (options.aiFailure) return Response.json({ error: { message: 'unavailable' } }, { status: 503 });
@@ -141,7 +142,7 @@ test('image retrieval prohibits redirects out of the allowlist', async t => {
   const s = setup(t);
   await s.request('/api/assist', assist());
   await s.request('/api/image?url=' + encodeURIComponent(record.discord_image_url));
-  for (const call of s.calls.filter(x => x.url.includes('cdn.discordapp'))) assert.equal(call.init.redirect, 'error');
+  for (const call of s.calls.filter(x => x.url.includes('cdn.discordapp'))) assert.equal(call.init.redirect, 'manual');
 });
 
 for (const raw of ['null', '[]', '{}', 'plain text', '{bad']) {
@@ -374,11 +375,11 @@ test('personal destination overrides shared webhook for photos and summary', asy
   const calls=s.calls.filter(c=>c.url.includes('discord.com/api/webhooks'));
   assert.equal(calls.length,3);
   assert(calls.every(c=>c.url===url || c.url===url+'?wait=true'));
-  assert(calls.every(c=>c.init.redirect==='error'));
+  assert(calls.every(c=>c.init.redirect==='manual'));
   assert.equal(s.rows.length,1);
 });
 
-for (const code of [400,401,403,404,413,429,500]) {
+for (const code of [301,302,307,308,400,401,403,404,413,429,500]) {
   test('reviewed Discord failure is actionable without leaking secrets: '+code,async t=>{
     const s=setup(t,{discordStatus:code,rows:[]});
     const res=await s.request('/api/deposit-reviewed',{userId:'alice',images:[photo],confirmed:true,reviewedAnalysis:{post_text:'test'}});
