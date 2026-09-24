@@ -175,7 +175,7 @@ async function uploadQuick() {
   setBusy(false, true);
   try {
     const payload = { ...depositPayload(), tone: "いつもの相棒", mood: "" };
-    const res = await fetch(RELAY_SERVER_URL, {
+    const res = await apiFetch(RELAY_SERVER_URL, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
     });
     const data = await safeJson(res);
@@ -200,7 +200,7 @@ async function generatePro() {
   renderGrid();
   setBusy(true, true);
   try {
-    const res = await fetch(`${RELAY_SERVER_URL}/api/preview`, {
+    const res = await apiFetch(`${RELAY_SERVER_URL}/api/preview`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
     });
     const data = await safeJson(res);
@@ -257,7 +257,7 @@ function renderDepositReview(data) {
     saveFeedback.textContent = "";
     renderGrid();
     try {
-      const res = await fetch(`${RELAY_SERVER_URL}/api/deposit-reviewed`, {
+      const res = await apiFetch(`${RELAY_SERVER_URL}/api/deposit-reviewed`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...pendingReview.payload, confirmed: true, photo_reports: pendingReview.photo_reports,
           reviewedAnalysis: { ...pendingReview.analysis, post_text: comment.value } })
@@ -356,6 +356,7 @@ function showToast(msg, isError = false) {
 
 function openSettings() {
   if (isSubmitting || isReadingPhotos) return;
+  document.getElementById("existingUserId").textContent = userId || "未作成";
   document.getElementById("userCallInput").value = userCall;
   document.getElementById("aiNameInput").value = aiName;
   document.getElementById("myPhraseInput").value = myPhrase;
@@ -428,7 +429,7 @@ async function loadMealHistory() {
   list.textContent = "読み込み中…";
 
   try {
-    const res = await fetch(`${RELAY_SERVER_URL}/api/logs?userId=${encodeURIComponent(userId)}&t=${Date.now()}`);
+    const res = await apiFetch(`${RELAY_SERVER_URL}/api/logs?userId=${encodeURIComponent(userId)}&t=${Date.now()}`);
     const data = await safeJson(res);
     if (!res.ok) throw new Error(data.error || "ログ取得に失敗しました");
     list.replaceChildren();
@@ -457,7 +458,13 @@ function buildHistoryCard(item) {
 
   if (item.photo_thumb) {
     const img = document.createElement("img");
-    img.src = `${RELAY_SERVER_URL}/api/image?url=${encodeURIComponent(item.photo_thumb)}`;
+    apiFetch(`${RELAY_SERVER_URL}/api/image?url=${encodeURIComponent(item.photo_thumb)}`)
+      .then(async response => {
+        if (!response.ok) throw new Error("image unavailable");
+        const objectUrl = URL.createObjectURL(await response.blob());
+        img.onload = img.onerror = () => URL.revokeObjectURL(objectUrl);
+        img.src = objectUrl;
+      }).catch(() => { img.alt = "写真を取得できませんでした"; });
     img.alt = "保存写真";
     img.loading = "lazy";
     img.style.cssText = "width:100%;max-height:220px;object-fit:cover;border-radius:6px;margin-bottom:10px";
@@ -535,7 +542,7 @@ async function loadAssist(item, action, card, button) {
   area.textContent = "AIが確認中…";
 
   try {
-    const res = await fetch(`${RELAY_SERVER_URL}/api/assist`, {
+    const res = await apiFetch(`${RELAY_SERVER_URL}/api/assist`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, recordId: item.record_id, action })
@@ -671,4 +678,68 @@ function prevImage(e) {
 function nextImage(e) {
   e.stopPropagation();
   if (modalIndex < imagesData.length - 1) openImageModal(modalIndex + 1);
+}
+
+
+async function apiFetch(url, options = {}) {
+  const token = await window.meshiAuth.token(RELAY_SERVER_URL);
+  const headers = new Headers(options.headers || {});
+  headers.set("Authorization", "Bearer " + token);
+  // Resolve the canonical record ID on every request, including a new device/reloaded tab.
+  const session = await fetch(`${RELAY_SERVER_URL}/api/session`, {headers});
+  const identity = await safeJson(session);
+  if (!session.ok || typeof identity.userId !== "string") throw new Error(identity.error || "ログインを確認できませんでした。");
+  if (userId !== identity.userId) {
+    invalidateReview();
+    document.getElementById("historyList").replaceChildren();
+    userId = identity.userId;
+    localStorage.setItem("meshi_user_id", userId);
+  }
+  const target = new URL(url);
+  if (target.searchParams.has("userId")) target.searchParams.set("userId", userId);
+  let body = options.body;
+  if (typeof body === "string") body = JSON.stringify({...JSON.parse(body), userId});
+  const response = await fetch(target, {...options, body, headers});
+  await updateQuota(headers);
+  if (response.status === 401) throw new Error("設定からメールでログインし直してください。");
+  return response;
+}
+let authBusy = false;
+async function updateQuota(headers) {
+  try {
+    const response = await fetch(`${RELAY_SERVER_URL}/api/quota`, {headers, signal: AbortSignal.timeout(3000)});
+    if (!response.ok) return;
+    const quota = await response.json();
+    document.getElementById("quotaStatus").textContent = `本日のAI生成：残り${quota.remaining}回 / ${quota.limit}回（日本時間0時にリセット）`;
+  } catch { /* Saving must not be reported as failed because the counter display failed. */ }
+}
+async function emailAction(action) {
+  if (isSubmitting || isReadingPhotos || authBusy) return;
+  authBusy = true;
+  const status = document.getElementById("emailStatus");
+  const password = document.getElementById("emailPassword");
+  const email = document.getElementById("emailAddress").value.trim();
+  const buttons = document.querySelectorAll('[aria-label="メールでログイン"] button');
+  buttons.forEach(button => button.disabled = true);
+  try {
+    status.textContent = "確認中…";
+    if (["login", "register", "logout"].includes(action)) {
+      invalidateReview(); document.getElementById("historyList").replaceChildren();
+      imagesData = []; renderGrid(); document.getElementById("shortMemoInput").value = "";
+    }
+    const message = await window.meshiAuth[action](RELAY_SERVER_URL, email, password.value);
+    if (["login", "refresh"].includes(action)) {
+      invalidateReview(); document.getElementById("historyList").replaceChildren();
+      const response = await apiFetch(`${RELAY_SERVER_URL}/api/session`);
+      if (!response.ok) throw new Error("ログイン状態を確認できませんでした。");
+    }
+    if (action === "logout") {
+      invalidateReview(); document.getElementById("historyList").replaceChildren();
+      imagesData = []; renderGrid();
+      document.getElementById("shortMemoInput").value = "";
+      document.getElementById("quotaStatus").textContent = "AI生成は1日5回です。";
+    }
+    status.textContent = message || "ログインしました。";
+  } catch (error) { status.textContent = error.message; }
+  finally { password.value = ""; authBusy = false; buttons.forEach(button => button.disabled = false); }
 }

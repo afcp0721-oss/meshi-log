@@ -1,16 +1,24 @@
+import { reserveGeneration, dailyUsage } from "./usage.mjs";
+import { emailIdentity, publicAuthConfig } from "./email-auth.mjs";
 import { normalizeMealReport, normalizeXDraft, normalizeDepositAnalysis, profileEntry } from "./analysis.mjs";
 
-const JSON_HEADERS = { "Content-Type": "application/json" };
+const JSON_HEADERS = { "Content-Type": "application/json", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
+const MAX_REQUEST_BYTES = 12 * 1024 * 1024;
 
-export default {
+const application = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const origin = request.headers.get("Origin");
+    const allowedOrigins = new Set(["https://afcp0721-oss.github.io", url.origin]);
     const cors = {
-      "Access-Control-Allow-Origin": "*",
+      ...(allowedOrigins.has(origin) ? { "Access-Control-Allow-Origin": origin } : {}),
+      "Vary": "Origin",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type"
     };
     const headers = { ...cors, ...JSON_HEADERS };
+
+    if (origin && !allowedOrigins.has(origin)) return json({ error: "このアクセス元からは利用できません" }, 403, headers);
 
     if (request.method === "OPTIONS") return new Response(null, { headers: cors });
 
@@ -24,7 +32,7 @@ export default {
         ).bind(userId).all();
         return json({ results: (results || []).map(record => ({ ...record, profile_entry: profileEntry(record) })) }, 200, headers);
       } catch (err) {
-        console.error("D1 Read Error:", err);
+        console.error("D1 Read Error:");
         return json({ error: "ログを取得できませんでした", results: [] }, 500, headers);
       }
     }
@@ -55,18 +63,19 @@ export default {
           headers: {
             ...cors,
             "Content-Type": contentType,
-            "Cache-Control": "public, max-age=3600"
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff"
           }
         });
       } catch (err) {
-        console.error("Image proxy error:", err);
+        console.error("Image proxy error:");
         return json({ error: "画像URLが不正です" }, 400, headers);
       }
     }
 
     if (request.method === "POST" && url.pathname === "/api/assist") {
       try {
-        const body = await request.json();
+        const body = await readBoundedJson(request);
         const userId = typeof body?.userId === "string" ? body.userId.trim() : "";
         const recordId = typeof body?.recordId === "number" || typeof body?.recordId === "string" ? Number(body.recordId) : NaN;
         const action = body?.action;
@@ -81,6 +90,7 @@ export default {
 
         const model = env.GEMINI_MODEL || "gemini-flash-latest";
         if (action === "x_post") {
+          await reserveGeneration(env, userId, 1);
           const prompt = `
 あなたはSNS投稿の編集アシスタントです。
 以下の写真日記記録から、Xに投稿できる自然な日本語の下書きを1つ作ってください。
@@ -133,6 +143,7 @@ export default {
   "comment":"短い一言"
 }
 `;
+        await reserveGeneration(env, userId, 1);
         const result = await callGemini(env.GEMINI_API_KEY, model, prompt, images, true);
         if (result.is_food === false) {
           return json({ error: "保存写真に食事を確認できませんでした" }, 422, headers);
@@ -143,14 +154,14 @@ export default {
         const report = normalizeMealReport(result);
         return json({ meal_report: report, profile_entry: profileEntry(record, report) }, 200, headers);
       } catch (err) {
-        console.error("Assist error:", err);
-        return json({ error: "AI補助を生成できませんでした" }, 500, headers);
+        console.error("Assist error:");
+        return json({ error: err.publicMessage || "AI補助を生成できませんでした" }, err.httpStatus || 500, headers);
       }
     }
 
     if (request.method === "POST" && ["/", "/api/preview", "/api/deposit-reviewed"].includes(url.pathname)) {
       try {
-        const payload = await request.json();
+        const payload = await readBoundedJson(request);
         if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
           return json({ error: "Invalid request" }, 400, headers);
         }
@@ -172,6 +183,7 @@ export default {
           discordWebhookUrl: Object.hasOwn(payload, "discordWebhookUrl") ? validateDiscordWebhook(payload.discordWebhookUrl) : undefined
         };
         if (!clean.userId) return json({ error: "userId is required" }, 400, headers);
+        if (url.pathname !== "/api/deposit-reviewed") await reserveGeneration(env, clean.userId, images.length);
 
         if (url.pathname === "/api/preview") {
           try {
@@ -185,7 +197,7 @@ export default {
                 ? normalizeMealReport(result.meal_report) : null
             }, 200, headers);
           } catch (err) {
-            console.error("Preview error:", err);
+            console.error("Preview error:");
             return json({ error: "コメントを生成できませんでした。写真はまだ預けられていません。" }, 502, headers);
           }
         }
@@ -202,14 +214,14 @@ export default {
             await handleBackgroundJob(clean, env, normalized);
             return json({ status: "saved", message: "確認した内容を記録しました" }, 200, headers);
           } catch (err) {
-            console.error("Reviewed deposit error:", err);
+            console.error("Reviewed deposit error:");
             return json({ error: err.publicMessage || "保存を確認できませんでした。過去ログを確認してから再試行してください。" }, 500, headers);
           }
         }
         ctx.waitUntil(handleBackgroundJob(clean, env));
         return json({ status: "accepted", message: "預かりました" }, 202, headers);
       } catch (err) {
-        return json({ error: err.message || "Invalid request" }, 400, headers);
+        return json({ error: err.publicMessage || "入力内容を確認してください" }, err.httpStatus || 400, headers);
       }
     }
 
@@ -231,7 +243,7 @@ function validateDiscordWebhook(value) {
   // Explicitly empty means text-only storage; do not fall back to the shared webhook.
   if (typeof value === "string" && !value.trim()) return "";
   if (typeof value !== "string" || !/^https:\/\/discord\.com\/api\/webhooks\/[0-9]+\/[A-Za-z0-9_-]+$/.test(value.trim())) {
-    throw new Error("設定にDiscordのウェブフックURLを保存してください。discord.comのURLが必要です。");
+    throw saveError("設定にDiscordのウェブフックURLを保存してください。discord.comのURLが必要です。");
   }
   return value.trim();
 }
@@ -291,7 +303,7 @@ async function analyzeDeposit(payload, env, preview = false) {
         results.map(r => `- ${r.category_minor || "other"}: ${r.post_text || ""}`).join("\n");
     }
   } catch (err) {
-    console.error("D1 recent context error:", err);
+    console.error("D1 recent context error:");
   }
 
   const prompt = `
@@ -409,7 +421,8 @@ async function sendDiscordText(webhookUrl, content) {
     const res = await fetch(webhookUrl, {
       method: "POST",
       redirect: "manual",
-      headers: JSON_HEADERS,
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(45000),
       body: JSON.stringify({ content, allowed_mentions: { parse: [] } })
     });
     if (!res.ok) console.error("Discord text failed:", res.status);
@@ -434,19 +447,21 @@ async function callGemini(apiKey, modelName, prompt, images, strict = false) {
   }
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent`,
     {
       method: "POST",
-      headers: JSON_HEADERS,
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      redirect: "manual",
+      signal: AbortSignal.timeout(45000),
       body: JSON.stringify({
         contents: [{ role: "user", parts }],
-        generationConfig: { responseMimeType: "application/json" }
+        generationConfig: { maxOutputTokens: 2048, responseMimeType: "application/json" }
       })
     }
   );
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message || `Gemini error: ${res.status}`);
+  if (!res.ok) throw new Error(`Gemini request failed: ${res.status}`);
   let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
   text = text.replace(/```json/gi, "").replace(/```/g, "").trim();
   try {
@@ -482,3 +497,79 @@ function isAllowedDiscordCdnHost(hostname) {
   const host = hostname.toLowerCase();
   return host === "cdn.discordapp.com" || host === "media.discordapp.net";
 }
+
+// Read the stream with a hard byte limit, including requests without Content-Length.
+async function readBoundedJson(request) {
+  const tooLarge = () => { const e = saveError("写真の合計サイズが大きすぎます。枚数やサイズを減らしてください。"); e.httpStatus = 413; return e; };
+  if (Number(request.headers.get("Content-Length")) > MAX_REQUEST_BYTES) throw tooLarge();
+  if (!request.body) throw new Error("Missing body");
+  const reader = request.body.getReader();
+  const chunks = []; let size = 0;
+  try {
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_REQUEST_BYTES) { await reader.cancel(); throw tooLarge(); }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const bytes = new Uint8Array(size); let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+  try { return JSON.parse(new TextDecoder().decode(bytes)); } catch { const e = saveError("送信内容の形式が正しくありません"); e.httpStatus = 400; throw e; }
+}
+
+
+// Verified email identities are mapped to existing record IDs by the operator.
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const origin = request.headers.get("Origin");
+    const allowed = origin === "https://afcp0721-oss.github.io" || origin === url.origin;
+    const headers = { ...JSON_HEADERS, Vary: "Origin",
+      ...(allowed ? {"Access-Control-Allow-Origin": origin} : {}),
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization" };
+    const fail = (error, status) => json({error}, status, headers);
+    if (origin && !allowed) return fail("このアクセス元からは利用できません", 403);
+    if (request.method === "OPTIONS") return new Response(null, {headers});
+    if (!env.EMAIL_USERS || !env.FIREBASE_PROJECT_ID || !env.ACCESS_LIMITER || !env.AI_LIMITER) return fail("利用設定を準備中です。運営者へお問い合わせください。", 503);
+    try {
+      const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+      if (!(await env.ACCESS_LIMITER.limit({key: "ip:" + ip})).success) return json({error:"アクセスが集中しています。1分ほど待ってください。"}, 429, {...headers,"Retry-After":"60"});
+      if (url.pathname === "/api/auth-config" && request.method === "GET") {
+        const config = publicAuthConfig(env);
+        return config ? json(config, 200, headers) : fail("メールログインは準備中です。", 503);
+      }
+      const token = (request.headers.get("Authorization") || "").match(/^Bearer ([A-Za-z0-9_.-]{1,8192})$/)?.[1];
+      if (!token) return fail("設定からメールでログインしてください。", 401);
+      const user = await emailIdentity(token, env);
+      if (url.pathname === "/api/quota" && request.method === "GET") return json(await dailyUsage(env, user.userId),200,headers);
+      if (url.pathname === "/api/session" && request.method === "GET") return json({userId:user.userId},200,headers);
+      if (request.method === "GET" && url.pathname === "/api/logs") {
+        if (url.searchParams.get("userId") !== user.userId) return fail("この記録にはアクセスできません",403);
+      }
+      if (request.method === "GET" && url.pathname === "/api/image") {
+        let imageUrl; try { imageUrl = new URL(url.searchParams.get("url")); } catch { return fail("画像URLが不正です",400); }
+        if (imageUrl.protocol !== "https:" || !isAllowedDiscordCdnHost(imageUrl.hostname) || imageUrl.username || imageUrl.password) return fail("画像URLが不正です",400);
+        const record = await env.DB.prepare("SELECT record_id FROM activity_records WHERE user_id = ? AND discord_image_url = ? LIMIT 1").bind(user.userId,url.searchParams.get("url") || "").first();
+        if (!record) return fail("画像が見つかりません",404);
+      }
+      if (request.method === "POST") {
+        const body = await readBoundedJson(request);
+        if (!body || typeof body !== "object" || Array.isArray(body)) return fail("入力内容を確認してください",400);
+        if (body.userId !== user.userId) return fail("この利用者として保存できません",403);
+        if (["/", "/api/preview", "/api/assist"].includes(url.pathname)) {
+          if (!(await env.AI_LIMITER.limit({key:"user:" + user.userId})).success) return json({error:"AIの連続利用を制限しています。1分ほど待ってください。"},429,{...headers,"Retry-After":"60"});
+        }
+        request = new Request(request, {body:JSON.stringify(body)});
+      }
+      const response = await application.fetch(request, env, ctx);
+      const secured = new Response(response.body,response);
+      for (const [key,value] of Object.entries(headers)) if (key !== "Content-Type") secured.headers.set(key,value);
+      return secured;
+    } catch (error) {
+      return fail(error.publicMessage || "処理を完了できませんでした。時間をおいて再試行してください。", error.httpStatus || 503);
+    }
+  }
+};

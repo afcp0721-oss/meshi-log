@@ -16,6 +16,8 @@
       margin-bottom: 8px;
       white-space: nowrap;
     }
+    #settingsCard .title { white-space: normal; overflow-wrap: anywhere; }
+    #emailStatus { margin-top: 10px; font-size: .85rem; }
     .desc {
       font-size: 0.85rem;
       color: #94a3b8;
@@ -48,7 +50,7 @@
     .mode-btn.active { background: #ea580c; color: #fff; }
 
     label { font-size: 0.8rem; font-weight: 700; color: #cbd5e1; display: block; margin: 12px 0 4px; }
-    input[type="text"], #discordInput { width: 100%; background: #0f172a; border: 1px solid #475569; color: #fff; padding: 10px; border-radius: 8px; font-size: 0.95rem; }
+    input[type="text"], input[type="email"], #emailPassword, #discordInput { width: 100%; background: #0f172a; border: 1px solid #475569; color: #fff; padding: 10px; border-radius: 8px; font-size: 0.95rem; }
     .chip-wrap { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
     .chip { background: #334155; color: #e2e8f0; font-size: 0.8rem; padding: 5px 10px; border-radius: 16px; cursor: pointer; }
     .chip.active { background: #ea580c; color: #fff; font-weight: bold; }
@@ -104,6 +106,25 @@
       <div class="desc">いつでも変更できます。</div>
       <p style="margin:12px 0"><a href="https://afcp0721-oss.github.io/meshi-log/guide.html" target="_blank" rel="noopener noreferrer" style="color:#fdba74">📖 はじめての方へ・特徴と使い方 ↗</a></p>
 
+      <section aria-label="メールでログイン">
+        <label for="emailAddress">メールアドレス</label>
+        <input type="email" id="emailAddress" autocomplete="email" placeholder="you@example.com">
+        <label for="emailPassword">パスワード（登録時は12文字以上）</label>
+        <input type="password" id="emailPassword" autocomplete="current-password" minlength="12">
+        <button class="btn-sub" onclick="emailAction('login')">ログイン</button>
+        <button class="btn-sub" onclick="emailAction('register')">初めての方：メールで登録</button>
+        <p class="desc">登録後、届いた確認メールのリンクを開いてください。身内テストは運営者の承認後に利用できます。</p>
+        <button class="btn-sub" onclick="emailAction('refresh')">メール確認が済んだら押す</button>
+        <details><summary>メールが届かない・パスワードを忘れた</summary>
+          <button class="btn-sub" onclick="emailAction('resend')">確認メールを再送する</button>
+          <button class="btn-sub" onclick="emailAction('reset')">パスワード再設定メールを送る</button>
+        </details>
+        <button class="btn-sub" onclick="emailAction('logout')">ログアウト</button>
+        <p id="emailStatus" role="status" aria-live="polite"></p>
+        <p class="desc">同じアカウントでログインすると機種変更後も記録を引き継げます。共有端末では使い終わったらログアウトしてください。認証情報はGoogle Firebaseで管理します。</p>
+        <details><summary>以前の記録を引き継ぐ方へ</summary><p>初回ログイン前に、この記録IDを運営者へ伝えてください。元の端末などで本人確認して対応付けます。</p><code id="existingUserId"></code><p>Discord保存先・呼び名は端末ごとに再設定してください。メールを使えなくなった場合は運営者へご連絡ください。</p></details>
+        <p id="quotaStatus" role="status">AI生成は1日5回。日本時間の午前0時にリセットします。</p>
+      </section>
       <label>あなたの呼ばれ方（必須）</label>
       <input type="text" id="userCallInput" placeholder="例：ボス, ニックネーム" value="ニックネーム">
       <div class="chip-wrap">
@@ -235,6 +256,7 @@
   </div>
 
   <!-- スクリプト読み込み（キャッシュ対策 v=4） -->
-  <script src="app.js?v=18"></script>
+  <script src="email-auth.js?v=1"></script>
+  <script src="app.js?v=19"></script>
 </body>
 </html>

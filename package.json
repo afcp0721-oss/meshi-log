@@ -1,0 +1,8 @@
+{
+  "name": "meshi-log",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "jose": "6.2.12"
+  }
+}

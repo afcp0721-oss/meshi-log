@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 const source = (await readFile(new URL('../staging/worker.mjs', import.meta.url), 'utf8'))
  .replace("import app from '../worker.js';", "const app = {fetch() {return new Response('API', {headers: {'Access-Control-Allow-Origin':'*'}})}};")
  .replace("import html from '../index.html';", 'const html = ' + JSON.stringify(await readFile(new URL('../index.html', import.meta.url), 'utf8')) + ';')
+ .replace("import emailScript from '../email-auth.js';", 'const emailScript = '+JSON.stringify(await readFile(new URL('../email-auth.js', import.meta.url), 'utf8'))+';')
  .replace("import script from '../app.js';", 'const script = ' + JSON.stringify(await readFile(new URL('../app.js', import.meta.url), 'utf8')) + ';');
 const {default: worker} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
 const env = {STAGING_PASSWORD:'test-only-password', GEMINI_API_KEY:'test', DISCORD_WEBHOOK_URL:'test'};
@@ -12,7 +13,7 @@ test('staging remains closed without each required secret', async () => {
  for (const name of Object.keys(env)) assert.equal((await worker.fetch(req('/api/logs'), {...env,[name]:''}, {})).status, 503);
 });
 test('every staging route requires correct credentials', async () => {
- for (const path of ['/', '/app.js', '/api/logs', '/api/image']) {
+ for (const path of ['/', '/app.js', '/email-auth.js', '/api/auth-config', '/api/logs', '/api/image']) {
   const res = await worker.fetch(req(path, 'wrong'), env, {});
   assert.equal(res.status,401);
   assert.match(res.headers.get('WWW-Authenticate'), /Basic/);
