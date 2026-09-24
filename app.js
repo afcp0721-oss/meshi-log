@@ -274,8 +274,8 @@ function renderDepositReview(data) {
       comment.readOnly = true;
       showToast("確認した内容で預けました。");
     } catch (err) {
-      status.textContent = "保存エラー：" + err.message;
-      saveFeedback.textContent = status.textContent;
+      status.textContent = "保存に失敗しました。ボタン下の案内を確認してください。";
+      saveFeedback.textContent = "保存エラー：" + err.message;
       saveFeedback.scrollIntoView({block:"center", behavior:"smooth"});
       confirm.disabled = false;
       cancel.disabled = false;
