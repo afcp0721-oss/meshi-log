@@ -310,7 +310,9 @@ function renderDepositReview(data) {
       area.append(card);
     });
     const note = document.createElement('p');
-    note.textContent = '預けると写真・レポート・X下書きをDiscordへ保管します。保存後の編集はDiscordに反映されません。カロリーは合算しません。';
+    note.textContent = pendingReview.payload.discordWebhookUrl
+      ? '預けると記録コメントをDBへ、写真・レポート・X下書きをDiscordへ保管します。保存後の編集はDiscordに反映されません。カロリーは合算しません。'
+      : '預けると記録コメントとメモをDBへ保存します。Discord未設定のため、写真・詳細レポート・X下書きは保存されません。必要な文章は画面を閉じる前にコピーしてください。';
     area.append(note);
   }
   if (!data.photo_reports && data.analysis.category_major === "food" && data.meal_report) {

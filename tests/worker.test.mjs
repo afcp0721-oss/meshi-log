@@ -357,8 +357,8 @@ test('missing or reordered photo reports cannot be saved',async t=>{
  assert.equal(s.rows.length,0);
 });
 
-for (const url of ['', 'https://evil.example/api/webhooks/123/token', 'https://discord.com.evil.example/api/webhooks/123/token', 'http://discord.com/api/webhooks/123/token', 'https://discord.com/api/webhooks/123/token?url=evil', 'https://discord.com/api/webhooks/123/token/../other']) {
-  test('reject unsafe or blank personal Discord destination: ' + url, async t => {
+for (const url of ['https://evil.example/api/webhooks/123/token', 'https://discord.com.evil.example/api/webhooks/123/token', 'http://discord.com/api/webhooks/123/token', 'https://discord.com/api/webhooks/123/token?url=evil', 'https://discord.com/api/webhooks/123/token/../other']) {
+  test('reject unsafe personal Discord destination: ' + url, async t => {
     const s = setup(t);
     const res = await s.request('/', {userId:'alice', images:[photo], discordWebhookUrl:url});
     assert.equal(res.status,400);
@@ -390,3 +390,36 @@ for (const code of [301,302,307,308,400,401,403,404,413,429,500]) {
     assert.equal(s.rows.length,0);
   });
 }
+
+for (const destination of ['', '   ']) {
+ test('empty Discord destination supports preview and reviewed DB-only save: '+JSON.stringify(destination),async t=>{
+  const s=setup(t,{rows:[],ai:{post_text:'DBだけの記録',category_major:'life'}});
+  const payload={userId:'alice',images:[photo],discordWebhookUrl:destination};
+  const preview=await s.request('/api/preview',payload);
+  assert.equal(preview.status,200);
+  assert.equal(s.rows.length,0); // Generation alone never saves.
+  const saved=await s.request('/api/deposit-reviewed',{...payload,confirmed:true,reviewedAnalysis:{post_text:'修正したコメント'}});
+  assert.equal(saved.status,200);
+  assert.equal(s.rows.length,1);
+  assert.equal(s.rows[0].post_text,'修正したコメント');
+  assert.equal(s.rows[0].discord_image_url,'');
+  assert.equal(s.calls.filter(c=>c.url.includes('discord.com')).length,0); // No shared-webhook fallback.
+  const history=await(await s.request('/api/logs?userId=alice')).json();
+  assert.equal(history.results.length,1);
+ });
+}
+test('quick DB-only deposit saves without Discord; DB failure does not claim Discord delivery',async t=>{
+ const s=setup(t,{rows:[],ai:{post_text:'記録',category_major:'life'}});
+ assert.equal((await s.request('/',{userId:'alice',images:[photo],discordWebhookUrl:''})).status,202);
+ await Promise.all(s.jobs);
+ assert.equal(s.rows.length,1);
+ assert.equal(s.calls.filter(c=>c.url.includes('discord.com')).length,0);
+});
+test('DB-only save reports failure without claiming a Discord upload',async t=>{
+ const s=setup(t,{rows:[],dbFailure:true});
+ const result=await s.request('/api/deposit-reviewed',{userId:'alice',images:[photo],discordWebhookUrl:'',confirmed:true,reviewedAnalysis:{post_text:'記録'}});
+ assert.equal(result.status,500);
+ const body=await result.json();
+ assert.match(body.error,/DB/); assert.ok(!body.error.includes('Discord'));
+ assert.equal(s.rows.length,0); assert.equal(s.calls.length,0);
+});
