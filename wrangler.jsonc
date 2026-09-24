@@ -9,5 +9,23 @@
       "database_name": "meshi-log-db",
       "database_id": "27bd82e7-7b10-467d-8777-217531f45ba1"
     }
+  ],
+  "ratelimits": [
+    {
+      "name": "ACCESS_LIMITER",
+      "namespace_id": "9262401",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
+    },
+    {
+      "name": "AI_LIMITER",
+      "namespace_id": "9262402",
+      "simple": {
+        "limit": 6,
+        "period": 60
+      }
+    }
   ]
 }

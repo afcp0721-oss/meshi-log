@@ -1,8 +1,12 @@
+import {jwks, tokens, project, emailUsers} from './email-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { normalizeMealReport, normalizeXDraft, profileEntry } from '../analysis.mjs';
+import { DatabaseSync } from 'node:sqlite';
 const source = (await readFile(new URL('../worker.js', import.meta.url), 'utf8'))
+  .replace('"./usage.mjs"', JSON.stringify(new URL('../usage.mjs', import.meta.url).href))
+  .replace('"./email-auth.mjs"', JSON.stringify(new URL('../email-auth.mjs', import.meta.url).href))
   .replace('"./analysis.mjs"', JSON.stringify(new URL('../analysis.mjs', import.meta.url).href));
 const { default: worker } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 const photo = 'data:image/jpeg;base64,aGk=';
@@ -10,16 +14,20 @@ const record = { record_id: 1, user_id: 'alice', post_text: '昼ごはん', cate
 const meal = { is_food: true, meal_name: '定食', estimated_calories_min: 500, estimated_calories_max: 750, ingredients: ['鶏肉'], nutrition_balance: '野菜も見えます', comment: '彩りのある一皿。' };
 function setup(t, options = {}) {
   t.mock.method(console, "error", () => {});
+  const quota = new DatabaseSync(':memory:');
+  quota.exec('CREATE TABLE ai_daily_usage(day TEXT,user_id TEXT,requests INTEGER,units INTEGER,PRIMARY KEY(day,user_id))');
+  t.after(()=>quota.close());
   const rows = options.rows || [{ ...record }];
   const calls = [];
   const statements = [];
   const jobs = [];
-  const env = { GEMINI_API_KEY: 'test-key', DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/test', DB: {
+  const env = { GLOBAL_DAILY_AI_UNITS:150, EMAIL_USERS: emailUsers, FIREBASE_PROJECT_ID:project, ACCESS_LIMITER:{async limit(){return {success:true}}}, AI_LIMITER:{async limit(){return {success:true}}}, GEMINI_API_KEY: 'test-key', DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/test', DB: {
     prepare(sql) { return { bind(...args) {
+      if(sql.includes("ai_daily_usage")) return {async first(){return quota.prepare(sql).get(...args)}};
       statements.push({ sql, args });
       return {
         async all() { return { results: rows.filter(r => r.user_id === args[0]) }; },
-        async first() { return rows.find(r => r.user_id === args[0] && r.record_id === args[1]) || null; },
+        async first() { if(sql.includes('discord_image_url = ?')) return rows.find(r=>r.user_id===args[0] && r.discord_image_url===args[1]) || null; return rows.find(r => r.user_id === args[0] && r.record_id === args[1]) || null; },
         async run() {
           if (options.dbFailure) throw new Error('test database unavailable');
           rows.push({ record_id: rows.length + 1, user_id: args[0], post_text: args[1], ai_comment: args[1], discord_image_url: args[2], photo_thumb: args[2], short_memo: args[3], category_major: args[4], category_minor: args[5] });
@@ -29,6 +37,7 @@ function setup(t, options = {}) {
   } };
   t.mock.method(globalThis, 'fetch', async (url, init = {}) => {
     if (init.redirect === 'error') throw new TypeError('Invalid redirect value, must be follow or manual');
+    if (String(url).includes('/service_accounts/v1/jwk/')) return Response.json(jwks,{headers:{'Cache-Control':'max-age=3600'}});
     calls.push({ url: String(url), init });
     if (String(url).includes('generativelanguage')) {
       if (options.aiFailure) return Response.json({ error: { message: 'unavailable' } }, { status: 503 });
@@ -45,9 +54,11 @@ function setup(t, options = {}) {
   });
   const ctx = { waitUntil(promise) { jobs.push(promise); } };
   async function request(path, body) {
-    return worker.fetch(new Request(`https://worker.test${path}`, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), env, ctx);
+    const id = body?.userId || new URL('https://worker.test'+path).searchParams.get('userId') || 'alice';
+    const headers = {'Authorization':'Bearer '+tokens[id],'Content-Type':'application/json'};
+    return worker.fetch(new Request(`https://worker.test${path}`, body === undefined ? {headers} : { method: 'POST', headers, body: JSON.stringify(body) }), env, ctx);
   }
-  return { request, rows, calls, statements, jobs };
+  return { request, rows, calls, statements, jobs, env, ctx };
 }
 const assist = (action = 'meal_report', extra = {}) => ({ userId: 'alice', recordId: 1, action, ...extra });
 
@@ -391,6 +402,41 @@ for (const code of [301,302,307,308,400,401,403,404,413,429,500]) {
   });
 }
 
+
+test('email gate blocks unauthenticated and mismatched identities before side effects', async t => {
+ const s=setup(t); const raw=(path,token,body)=>worker.fetch(new Request('https://worker.test'+path,{method:body?'POST':'GET',headers:token?{Authorization:'Bearer '+token}:{},...(body?{body:JSON.stringify(body)}:{})}),s.env,s.ctx);
+ assert.equal((await raw('/api/logs?userId=alice')).status,401);
+ assert.equal((await raw('/api/logs?userId=bob',tokens.alice)).status,403);
+ assert.equal((await raw('/api/preview',tokens.alice,{userId:'bob',images:[photo]})).status,403);
+ assert.equal((await raw('/api/image?url='+encodeURIComponent(record.discord_image_url),tokens.bob)).status,404);
+ assert.equal((await raw('/api/session','z'.repeat(40))).status,401);
+ assert.equal(s.calls.length,0);
+});
+test('missing security bindings and rate-limit outages fail closed', async t=>{
+ const s=setup(t); const req=()=>new Request('https://worker.test/api/session',{headers:{Authorization:'Bearer '+tokens.alice}});
+ for(const key of ['EMAIL_USERS','FIREBASE_PROJECT_ID','ACCESS_LIMITER','AI_LIMITER']) assert.equal((await worker.fetch(req(),{...s.env,[key]:undefined},s.ctx)).status,503);
+ s.env.ACCESS_LIMITER.limit=async()=>{throw Error('sensitive detail')};
+ const response=await worker.fetch(req(),s.env,s.ctx);assert.equal(response.status,503);assert.ok(!(await response.text()).includes('sensitive detail'));
+});
+test('AI rate limit rejects before Gemini and Discord',async t=>{
+ const s=setup(t);s.env.AI_LIMITER.limit=async()=>({success:false});
+ assert.equal((await s.request('/api/preview',{userId:'alice',images:[photo]})).status,429);assert.equal(s.calls.length,0);
+});
+test('Gemini key travels only in a header',async t=>{
+ const s=setup(t);await s.request('/api/preview',{userId:'alice',images:[photo]});
+ const call=s.calls.find(x=>x.url.includes('generativelanguage'));assert.ok(call);assert.ok(!call.url.includes('key='));assert.equal(call.init.headers['x-goog-api-key'],'test-key');
+});
+test('untrusted browser origin and oversized streaming body are rejected',async t=>{
+ const s=setup(t);assert.equal((await worker.fetch(new Request('https://worker.test/api/session',{headers:{Origin:'https://evil.test'}}),s.env,s.ctx)).status,403);
+ const r=await worker.fetch(new Request('https://worker.test/api/preview',{method:'POST',headers:{Authorization:'Bearer '+tokens.alice},body:'x'.repeat(12*1024*1024+1)}),s.env,s.ctx);assert.equal(r.status,413);assert.equal(s.calls.length,0);
+});
+
+test('expired approval is denied and session returns only canonical identity',async t=>{
+ const s=setup(t);const token=tokens.alice;const req=()=>new Request('https://worker.test/api/session',{headers:{Authorization:'Bearer '+token}});
+ assert.deepEqual(await (await worker.fetch(req(),s.env,s.ctx)).json(),{userId:'alice'});
+ const users=JSON.parse(s.env.EMAIL_USERS);users.alice.expiresAt='2000-01-01';s.env.EMAIL_USERS=JSON.stringify(users);
+ assert.equal((await worker.fetch(req(),s.env,s.ctx)).status,403);
+});
 for (const destination of ['', '   ']) {
  test('empty Discord destination supports preview and reviewed DB-only save: '+JSON.stringify(destination),async t=>{
   const s=setup(t,{rows:[],ai:{post_text:'DBだけの記録',category_major:'life'}});
@@ -422,4 +468,14 @@ test('DB-only save reports failure without claiming a Discord upload',async t=>{
  const body=await result.json();
  assert.match(body.error,/DB/); assert.ok(!body.error.includes('Discord'));
  assert.equal(s.rows.length,0); assert.equal(s.calls.length,0);
+});
+
+test('preview and history AI share five calls; save/read remain available at cap',async t=>{
+ const s=setup(t,{ai:{x_post_text:'今日の記録',post_text:'昼食',category_major:'food'}});
+ for(let i=0;i<5;i++) assert.equal((await s.request('/api/assist',assist('x_post'))).status,200);
+ const before=s.calls.length;
+ assert.equal((await s.request('/api/preview',{userId:'alice',images:[photo],discordWebhook:''})).status,429);
+ assert.equal(s.calls.length,before);
+ assert.equal((await s.request('/api/logs?userId=alice')).status,200);
+ assert.equal((await (await s.request('/api/quota')).json()).remaining,0);
 });

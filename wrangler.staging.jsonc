@@ -3,11 +3,38 @@
   "main": "staging/worker.mjs",
   "compatibility_date": "2026-09-10",
   "rules": [
-    { "type": "Text", "globs": ["**/index.html", "**/app.js"], "fallthrough": false }
+    {
+      "type": "Text",
+      "globs": [
+        "**/index.html",
+        "**/app.js", "**/email-auth.js"
+      ],
+      "fallthrough": false
+    }
   ],
-  "d1_databases": [{
-    "binding": "DB",
-    "database_name": "meshi-log-staging-db",
-    "database_id": "113548a9-4eef-4505-98d5-7d293fd6746d"
-  }]
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "meshi-log-staging-db",
+      "database_id": "113548a9-4eef-4505-98d5-7d293fd6746d"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "ACCESS_LIMITER",
+      "namespace_id": "9262403",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
+    },
+    {
+      "name": "AI_LIMITER",
+      "namespace_id": "9262404",
+      "simple": {
+        "limit": 6,
+        "period": 60
+      }
+    }
+  ]
 }

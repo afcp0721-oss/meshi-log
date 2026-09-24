@@ -7,6 +7,8 @@ const { resolve } = require('node:path');
   const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await page.addInitScript(() => { if (!localStorage.getItem('email-mock-seeded')) { localStorage.setItem('email-mock-seeded','yes'); localStorage.setItem('email-mock-user','yes'); } });
+    let mailCalls = 0;
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     let perPhoto = false;
@@ -27,9 +29,32 @@ const { resolve } = require('node:path');
     ];
     await page.route('**/*', async route => {
       const url = new URL(route.request().url());
+      if (url.hostname === 'www.gstatic.com') {
+        const body = url.pathname.endsWith('firebase-app.js') ? 'export function initializeApp(config) {return config}' : `
+          const user = {emailVerified:true,getIdToken:async()=> 'test-firebase-token'};
+          const auth = {authStateReady:async()=>{},get currentUser(){return localStorage.getItem('email-mock-user')?user:null}};
+          export const browserLocalPersistence = {};
+          export function getAuth(){return auth}
+          export async function setPersistence(){}
+          export async function signInWithEmailAndPassword(auth,email,password){if(password==='wrong') throw {code:'auth/invalid-credential'};user.emailVerified=true;localStorage.setItem('email-mock-user','yes')}
+          export async function createUserWithEmailAndPassword(){user.emailVerified=false;localStorage.setItem('email-mock-user','yes');return {user}}
+          export async function sendEmailVerification(){await fetch('https://mock.test/mail',{method:'POST'})}
+          export async function sendPasswordResetEmail(){await fetch('https://mock.test/mail',{method:'POST'})}
+          export async function reload(){user.emailVerified=true}
+          export async function signOut(){localStorage.removeItem('email-mock-user')}
+        `;
+        return route.fulfill({contentType:'text/javascript',body});
+      }
+      if (url.hostname==='mock.test') { mailCalls++; return route.fulfill({json:{ok:true}}); }
+      if (url.pathname === '/api/auth-config') return route.fulfill({json:{apiKey:'public',appId:'test',projectId:'test',authDomain:'test.firebaseapp.com'}});
       if (url.hostname === 'app.test') {
         const file = url.pathname === '/' ? 'index.html' : url.pathname.slice(1).split('?')[0];
         return route.fulfill({ contentType: file.endsWith('.js') ? 'text/javascript' : 'text/html', body: readFileSync(resolve(__dirname, '..', file)) });
+      }
+      if (url.pathname === '/api/quota') return route.fulfill({json:{limit:5,remaining:4}});
+      if (url.pathname === '/api/session') {
+        assert.equal(route.request().headers().authorization,'Bearer test-firebase-token');
+        return route.fulfill({json:{userId:'email-alice'}});
       }
       if (url.pathname === '/api/preview') {
         previewCalls++;
@@ -173,6 +198,29 @@ const { resolve } = require('node:path');
     assert.equal(reviewedPayload.photo_reports.length,3);
     assert.equal(reviewedPayload.photo_reports[1].x_post_text,'2枚目を編集');
     assert.equal(reviewedPayload.photoReports,true);
+    await page.getByRole('button', {name:'⚙️ 設定'}).click();
+    await page.getByRole('button', {name:'ログアウト',exact:true}).click();
+    await page.getByText('ログアウトしました。',{exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>localStorage.getItem('email-mock-user')),null);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false);
+    await page.locator('#emailAddress').fill('tester@example.test');
+    await page.locator('#emailPassword').fill('wrong');
+    await page.getByRole('button',{name:'ログイン',exact:true}).click();
+    await page.getByText('メールアドレス・パスワードを確認してください。登録済みの場合はログインか再設定をお試しください。',{exact:true}).waitFor();
+    assert.equal(await page.locator('#emailPassword').inputValue(),'');
+    await page.locator('#emailPassword').fill('test-password-long');
+    await page.getByRole('button',{name:'初めての方：メールで登録',exact:true}).click();
+    await page.getByText('確認メールを送りました。メール内のリンクを開いてから、この画面に戻ってください。',{exact:true}).waitFor();
+    assert.equal(mailCalls,1);
+    assert.equal(await page.evaluate(async()=>{try{await meshiAuth.token('https://api.test');return false}catch{return true}}),true);
+    await page.getByRole('button',{name:'メール確認が済んだら押す',exact:true}).click();
+    await page.getByText('メール確認が完了し、ログインしました。',{exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>localStorage.getItem('meshi_user_id')),'email-alice');
+    assert.equal(await page.locator('#resultArea').innerText(),'');
+    await page.reload();
+    await page.getByRole('button',{name:'📖 過去ログ'}).click();
+    await page.getByRole('button',{name:'🍽️ めしレポ'}).waitFor();
+    assert.equal(mailCalls,1);
     assert.deepEqual(errors, []);
     console.log('PASS quick deposit, preview/edit/save/cancel/retry, stale review invalidation, X confirmation/reset, history, meal report, mobile layout');
   } finally { await browser.close(); }
