@@ -9,6 +9,8 @@ let imagesData = [];
 let selectedTone = "いつもの相棒";
 let selectedMood = "";
 let isSubmitting = false;
+let isReadingPhotos = false;
+let pendingReview = null;
 let modalIndex = 0;
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -16,6 +18,7 @@ window.addEventListener("DOMContentLoaded", () => {
     userId = "usr_" + cryptoRandomId();
     localStorage.setItem("meshi_user_id", userId);
   }
+  document.getElementById("shortMemoInput").addEventListener("input", invalidateReview);
   updateUIHeaders();
   renderGrid();
 });
@@ -52,34 +55,28 @@ function toggleMood(el, mood) {
   }
 }
 
-function handleFileSelect(event) {
+async function handleFileSelect(event) {
   const files = Array.from(event.target.files || []);
   event.target.value = "";
-  if (!files.length) return;
-
+  if (!files.length || isSubmitting || isReadingPhotos) return;
   const remaining = MAX_PHOTOS - imagesData.length;
   if (remaining <= 0) return showToast("写真は1回につき最大3枚です");
-
-  const targets = files.slice(0, remaining);
-  let completed = 0;
-  targets.forEach(file => {
-    if (!file.type.startsWith("image/")) {
-      completed++;
-      if (completed === targets.length) renderGrid();
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = e => compressImage(e.target.result, compressed => {
-      imagesData.push(compressed);
-      completed++;
-      if (completed === targets.length) renderGrid();
-    });
-    reader.onerror = () => {
-      completed++;
-      if (completed === targets.length) renderGrid();
-    };
-    reader.readAsDataURL(file);
-  });
+  invalidateReview();
+  isReadingPhotos = true;
+  renderGrid();
+  try {
+    const photos = await Promise.all(files.slice(0, remaining).map(file => new Promise(resolve => {
+      if (!file.type.startsWith("image/")) return resolve(null);
+      const reader = new FileReader();
+      reader.onload = e => compressImage(e.target.result, resolve);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    })));
+    imagesData.push(...photos.filter(Boolean));
+  } finally {
+    isReadingPhotos = false;
+    renderGrid();
+  }
 }
 
 function compressImage(dataUrl, callback) {
@@ -98,7 +95,7 @@ function compressImage(dataUrl, callback) {
     canvas.getContext("2d").drawImage(img, 0, 0, w, h);
     callback(canvas.toDataURL("image/jpeg", 0.82));
   };
-  img.onerror = () => showToast("画像を読み込めませんでした");
+  img.onerror = () => { showToast("画像を読み込めませんでした"); callback(null); };
   img.src = dataUrl;
 }
 
@@ -135,75 +132,204 @@ function renderGrid() {
     grid.appendChild(add);
   }
 
-  const disabled = imagesData.length === 0 || isSubmitting;
+  const busy = isSubmitting || isReadingPhotos;
+  grid.querySelectorAll("button").forEach(button => { button.disabled = busy; });
+  document.getElementById("fileInput").disabled = busy;
+  document.getElementById("shortMemoInput").disabled = busy;
+  const disabled = imagesData.length === 0 || busy || pendingReview !== null;
   document.getElementById("btnQuickUpload").disabled = disabled;
   document.getElementById("btnProGenerate").disabled = disabled;
 }
 
 function removeImage(idx) {
-  if (isSubmitting) return;
+  if (isSubmitting || isReadingPhotos) return;
+  invalidateReview();
   imagesData.splice(idx, 1);
   renderGrid();
   document.getElementById("resultArea").style.display = "none";
 }
 
+function invalidateReview() {
+  pendingReview = null;
+  const area = document.getElementById("resultArea");
+  area.replaceChildren();
+  area.style.display = "none";
+  renderGrid();
+}
+
+function depositPayload() {
+  return {
+    images: [...imagesData], photoReports: true,
+    shortMemo: document.getElementById("shortMemoInput").value.trim(),
+    userId, aiName, callName: userCall,
+    tone: selectedTone, mood: selectedMood
+  };
+}
+
 async function uploadQuick() {
-  if (!imagesData.length || isSubmitting) return;
-  await submitDeposit({ tone: "いつもの相棒", mood: "" }, false);
-}
-
-async function generatePro() {
-  if (!imagesData.length || isSubmitting) return;
-  await submitDeposit({ tone: selectedTone, mood: selectedMood }, true);
-}
-
-async function submitDeposit(options, showResult) {
+  if (!imagesData.length || isSubmitting || isReadingPhotos || pendingReview) return;
+  invalidateReview();
   isSubmitting = true;
   renderGrid();
-  setBusy(showResult, true);
-
-  const memo = document.getElementById("shortMemoInput")?.value.trim() || "";
-  const payload = {
-    images: [...imagesData],
-    shortMemo: memo,
-    userId,
-    aiName,
-    callName: userCall,
-    tone: options.tone,
-    mood: options.mood
-  };
-
+  setBusy(false, true);
   try {
+    const payload = { ...depositPayload(), tone: "いつもの相棒", mood: "" };
     const res = await fetch(RELAY_SERVER_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
     });
     const data = await safeJson(res);
     if (!res.ok) throw new Error(data.error || `送信に失敗しました (${res.status})`);
-
-    showToast(showResult
-      ? "預かりました。解析後のコメントは過去ログに反映されます。"
-      : "預かりました！ 相棒が裏側で解析・記録します。");
-
+    showToast("預かりました！ 相棒が裏側で解析・記録します。");
     imagesData = [];
-    const memoInput = document.getElementById("shortMemoInput");
-    if (memoInput) memoInput.value = "";
-    document.getElementById("resultArea").style.display = "none";
+    document.getElementById("shortMemoInput").value = "";
   } catch (err) {
     showToast("送信エラー：" + err.message, true);
   } finally {
     isSubmitting = false;
-    setBusy(showResult, false);
+    setBusy(false, false);
     renderGrid();
   }
+}
+
+async function generatePro() {
+  if (!imagesData.length || isSubmitting || isReadingPhotos || pendingReview) return;
+  invalidateReview();
+  const payload = depositPayload();
+  isSubmitting = true;
+  renderGrid();
+  setBusy(true, true);
+  try {
+    const res = await fetch(`${RELAY_SERVER_URL}/api/preview`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+    });
+    const data = await safeJson(res);
+    if (!res.ok || typeof data.analysis?.post_text !== "string" || !data.analysis.post_text.trim()) {
+      throw new Error(data.error || "コメントを生成できませんでした");
+    }
+    pendingReview = { payload, analysis: data.analysis, photo_reports: data.photo_reports };
+    renderDepositReview(data);
+  } catch (err) {
+    showToast("生成エラー：" + err.message, true);
+  } finally {
+    isSubmitting = false;
+    setBusy(true, false);
+    renderGrid();
+  }
+}
+
+function renderDepositReview(data) {
+  const area = document.getElementById("resultArea");
+  area.replaceChildren();
+  area.style.display = "block";
+  const status = document.createElement("p");
+  status.textContent = "まだ預けていません。コメントを確認・編集してください。";
+  status.className = "desc";
+  status.setAttribute("role", "status");
+  const label = document.createElement("label");
+  label.htmlFor = "reviewComment";
+  label.textContent = "記録するコメント";
+  const comment = document.createElement("textarea");
+  comment.id = "reviewComment";
+  comment.value = data.analysis.post_text;
+  comment.maxLength = 2000;
+  comment.style.cssText = "width:100%;min-height:100px;padding:10px;background:#0f172a;color:#fff;border:1px solid #475569;border-radius:8px;font-size:.9rem";
+  const confirm = document.createElement("button");
+  confirm.type = "button";
+  confirm.className = "btn-main";
+  confirm.textContent = "この内容で預ける";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "btn-sub";
+  cancel.textContent = "戻って写真・メモを変更";
+  cancel.addEventListener("click", () => { if (!isSubmitting) invalidateReview(); });
+  comment.addEventListener("input", () => { confirm.disabled = !comment.value.trim(); });
+  confirm.addEventListener("click", async () => {
+    if (!pendingReview || isSubmitting || !comment.value.trim()) return;
+    isSubmitting = true;
+    confirm.disabled = true;
+    cancel.disabled = true;
+    comment.disabled = true;
+    confirm.textContent = "保存中…";
+    renderGrid();
+    try {
+      const res = await fetch(`${RELAY_SERVER_URL}/api/deposit-reviewed`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...pendingReview.payload, confirmed: true, photo_reports: pendingReview.photo_reports,
+          reviewedAnalysis: { ...pendingReview.analysis, post_text: comment.value } })
+      });
+      const result = await safeJson(res);
+      if (!res.ok || result.status !== "saved") throw new Error(result.error || "保存の完了を確認できませんでした。過去ログを確認してください。");
+      pendingReview = null;
+      imagesData = [];
+      document.getElementById("shortMemoInput").value = "";
+      status.textContent = "確認したコメントで記録しました。X投稿は下の下書きを確認してから行えます。";
+      confirm.remove();
+      cancel.remove();
+      comment.disabled = false;
+      comment.readOnly = true;
+      showToast("確認した内容で預けました。");
+    } catch (err) {
+      status.textContent = "保存エラー：" + err.message;
+      confirm.disabled = false;
+      cancel.disabled = false;
+      comment.disabled = false;
+      confirm.textContent = "この内容で預ける";
+    } finally {
+      isSubmitting = false;
+      renderGrid();
+    }
+  });
+  area.append(status, label, comment, confirm, cancel);
+  if (data.photo_reports) {
+    data.photo_reports.forEach((report, index) => {
+      const card = document.createElement('section');
+      card.className = 'card';
+      const title = document.createElement('h3');
+      title.textContent = `写真${index + 1}・${report.kind === 'meal' ? 'めしレポ' : 'ライフレポ'}`;
+      const photo = document.createElement('img');
+      photo.src = pendingReview.payload.images[index];
+      photo.alt = `写真${index + 1}`;
+      photo.style.cssText = 'width:100%;max-height:220px;object-fit:contain';
+      const text = document.createElement('p');
+      text.textContent = report.comment;
+      card.append(title, photo, text);
+      if (report.meal_report) renderMealReport(card, report.meal_report, true);
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = '𝕏 投稿文を確認する（任意）';
+      details.append(summary);
+      renderXDraft(details, report.x_post_text, value => {report.x_post_text = value;});
+      card.append(details);
+      area.append(card);
+    });
+    const note = document.createElement('p');
+    note.textContent = '預けると写真・レポート・X下書きをDiscordへ保管します。保存後の編集はDiscordに反映されません。カロリーは合算しません。';
+    area.append(note);
+  }
+  if (!data.photo_reports && data.analysis.category_major === "food" && data.meal_report) {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = "🍽️ めしレポを見る";
+    details.appendChild(summary);
+    renderMealReport(details, data.meal_report, true);
+    area.appendChild(details);
+  }
+  if (!data.photo_reports && data.x_post_text) {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = "𝕏 投稿文を確認する（任意）";
+    details.appendChild(summary);
+    renderXDraft(details, data.x_post_text);
+    area.appendChild(details);
+  }
+  area.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function setBusy(pro, busy) {
   const spin = document.getElementById(pro ? "spinPro" : "spinBasic");
   const text = document.getElementById(pro ? "textPro" : "textBasic");
   if (spin) spin.style.display = busy ? "inline-block" : "none";
-  if (text) text.textContent = busy ? "預かり中…" : (pro ? "✨ じっくり預ける" : "預ける");
+  if (text) text.textContent = busy ? (pro ? "コメント生成中…" : "預かり中…") : (pro ? "確認して預ける" : "そのまま預ける");
 }
 
 async function safeJson(res) {
@@ -220,6 +346,7 @@ function showToast(msg, isError = false) {
 }
 
 function openSettings() {
+  if (isSubmitting || isReadingPhotos) return;
   document.getElementById("userCallInput").value = userCall;
   document.getElementById("aiNameInput").value = aiName;
   document.getElementById("myPhraseInput").value = myPhrase;
@@ -235,6 +362,7 @@ function setAiName(v) { document.getElementById("aiNameInput").value = v; }
 function setPhrase(v) { document.getElementById("myPhraseInput").value = v; }
 
 async function saveSettings() {
+  invalidateReview();
   userCall = document.getElementById("userCallInput").value.trim() || "ニックネーム";
   aiName = document.getElementById("aiNameInput").value.trim() || "ログアシスタント";
   myPhrase = document.getElementById("myPhraseInput").value.trim() || "リピ確定！";
@@ -248,6 +376,7 @@ async function saveSettings() {
 }
 
 async function loadMealHistory() {
+  if (isSubmitting || isReadingPhotos) return;
   const modal = document.getElementById("historyModal");
   const list = document.getElementById("historyList");
   modal.style.display = "block";
@@ -312,7 +441,172 @@ function buildHistoryCard(item) {
   comment.textContent = item.ai_comment || "記録完了";
   comment.style.cssText = "font-size:.9rem;color:#f8fafc;line-height:1.5;background:#1e293b;padding:10px;border-radius:6px;border-left:3px solid #f97316";
   card.appendChild(comment);
+
+  const actions = document.createElement("div");
+  actions.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;margin-top:10px";
+
+  const xBtn = document.createElement("button");
+  xBtn.type = "button";
+  xBtn.className = "btn-gear";
+  xBtn.textContent = "𝕏 投稿下書き";
+  xBtn.addEventListener("click", () => loadAssist(item, "x_post", card, xBtn));
+  actions.appendChild(xBtn);
+
+  if (item.category_major === "food") {
+    const reportBtn = document.createElement("button");
+    reportBtn.type = "button";
+    reportBtn.className = "btn-gear";
+    reportBtn.textContent = "🍽️ めしレポ";
+    reportBtn.addEventListener("click", () => loadAssist(item, "meal_report", card, reportBtn));
+    actions.appendChild(reportBtn);
+  }
+
+  card.appendChild(actions);
+
+  const assistArea = document.createElement("div");
+  assistArea.className = "assist-area";
+  assistArea.setAttribute("aria-live", "polite");
+  assistArea.style.cssText = "display:none;margin-top:10px";
+  card.appendChild(assistArea);
   return card;
+}
+
+async function loadAssist(item, action, card, button) {
+  const area = card.querySelector(".assist-area");
+  if (!area || card.dataset.assistBusy === "true") return;
+  const cacheKey = action === "x_post" ? "xDraft" : "mealReport";
+  if (card.assistCache?.[cacheKey] !== undefined) {
+    area.replaceChildren();
+    area.style.display = "block";
+    if (action === "x_post") renderXDraft(area, card.assistCache.xDraft, value => { card.assistCache.xDraft = value; });
+    else renderMealReport(area, card.assistCache.mealReport);
+    return;
+  }
+  card.dataset.assistBusy = "true";
+  const buttons = card.querySelectorAll("button");
+  buttons.forEach(btn => { btn.disabled = true; });
+  const oldText = button.textContent;
+  button.textContent = "生成中…";
+  area.style.display = "block";
+  area.textContent = "AIが確認中…";
+
+  try {
+    const res = await fetch(`${RELAY_SERVER_URL}/api/assist`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, recordId: item.record_id, action })
+    });
+    const data = await safeJson(res);
+    if (!res.ok) throw new Error(data.error || "生成できませんでした");
+    area.replaceChildren();
+
+    card.assistCache ||= {};
+    if (action === "x_post") {
+      card.assistCache.xDraft = data.x_post_text || "";
+      renderXDraft(area, card.assistCache.xDraft, value => { card.assistCache.xDraft = value; });
+    } else {
+      card.assistCache.mealReport = data.meal_report || {};
+      renderMealReport(area, card.assistCache.mealReport);
+    }
+  } catch (err) {
+    area.textContent = err.message;
+    area.style.color = "#f87171";
+  } finally {
+    card.dataset.assistBusy = "false";
+    buttons.forEach(btn => { btn.disabled = false; });
+    button.textContent = oldText;
+  }
+}
+
+function renderXDraft(area, text, onEdit = () => {}) {
+  area.style.color = "";
+  const title = document.createElement("div");
+  title.textContent = "𝕏 投稿下書き";
+  title.style.cssText = "font-size:.8rem;font-weight:bold;color:#cbd5e1;margin-bottom:6px";
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("aria-label", "X投稿の下書き（編集できます）");
+  textarea.style.cssText = "width:100%;min-height:90px;box-sizing:border-box;background:#0f172a;color:#fff;border:1px solid #475569;border-radius:8px;padding:8px;font-size:.88rem";
+
+  const share = document.createElement("a");
+  share.className = "btn-x";
+  share.target = "_blank";
+  share.rel = "noopener noreferrer";
+  share.textContent = "𝕏 でポスト";
+  const counter = document.createElement("div");
+  counter.className = "x-draft-count";
+  counter.style.cssText = "font-size:.75rem;color:#94a3b8;margin-top:6px";
+  const consent = document.createElement("label");
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  consent.append(checkbox, document.createTextNode(" 投稿内容を確認しました"));
+  const refreshLink = () => {
+    const ready = checkbox.checked && !!textarea.value.trim();
+    if (ready) share.href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(textarea.value)}`;
+    else share.removeAttribute("href");
+    share.setAttribute("aria-disabled", String(!ready));
+    share.style.opacity = ready ? "1" : ".45";
+    const length = [...new Intl.Segmenter("ja", { granularity: "grapheme" }).segment(textarea.value)].length;
+    counter.textContent = `${length}文字（目安130文字）`;
+    onEdit(textarea.value);
+  };
+  checkbox.addEventListener("change", refreshLink);
+  textarea.addEventListener("input", () => { checkbox.checked = false; refreshLink(); });
+  share.addEventListener("click", event => {
+    if (!checkbox.checked || !textarea.value.trim()) event.preventDefault();
+  });
+  share.setAttribute("role", "link");
+  refreshLink();
+  const note = document.createElement("p");
+  note.textContent = "130文字程度の下書きです。Xの投稿画面で確認してポストできます。写真はX側で追加してください。";
+  note.style.cssText = "font-size:.75rem;color:#94a3b8;margin-top:6px";
+  area.append(title, textarea, counter, note, consent, share);
+}
+
+function renderMealReport(area, report, preview = false) {
+  area.style.color = "";
+  const box = document.createElement("div");
+  box.style.cssText = "background:#111827;border:1px solid #374151;border-radius:8px;padding:10px;font-size:.84rem;line-height:1.55;color:#e5e7eb";
+
+  const title = document.createElement("div");
+  title.textContent = "🍽️ めしレポ";
+  title.style.cssText = "font-weight:bold;color:#fb923c;margin-bottom:6px";
+  box.appendChild(title);
+
+  const name = document.createElement("div");
+  name.textContent = report.meal_name || "食事";
+  box.appendChild(name);
+
+  const kcal = document.createElement("div");
+  const min = report.estimated_calories_min;
+  const max = report.estimated_calories_max;
+  const hasRange = Number.isFinite(min) && Number.isFinite(max) && min > 0 && max >= min;
+  kcal.textContent = hasRange ? `推定カロリー：約${min}〜${max} kcal` : "推定カロリー：算出できませんでした";
+  kcal.style.cssText = "font-weight:bold;margin-top:4px";
+  box.appendChild(kcal);
+
+  if (Array.isArray(report.ingredients) && report.ingredients.length) {
+    const ingredients = document.createElement("div");
+    ingredients.textContent = "見える食材：" + report.ingredients.join("、");
+    box.appendChild(ingredients);
+  }
+  if (report.nutrition_balance) {
+    const nutrition = document.createElement("div");
+    nutrition.textContent = "バランス：" + report.nutrition_balance;
+    box.appendChild(nutrition);
+  }
+  if (report.comment) {
+    const comment = document.createElement("div");
+    comment.textContent = report.comment;
+    comment.style.cssText = "margin-top:4px";
+    box.appendChild(comment);
+  }
+  const note = document.createElement("div");
+  note.textContent = `${report.image_scope === "this_photo" ? "この写真が対象です。" : (preview ? "選択した" : "保存された") + "先頭の写真1枚が対象です。"}写真からの概算で、実際の量・材料・調理法により変わります。`;
+  note.style.cssText = "font-size:.72rem;color:#94a3b8;margin-top:6px";
+  box.appendChild(note);
+  area.appendChild(box);
 }
 
 function closeHistory() {
