@@ -16,6 +16,9 @@
       margin-bottom: 8px;
       white-space: nowrap;
     }
+    #settingsCard .title { white-space: normal; overflow-wrap: anywhere; }
+    #phoneRecaptcha { max-width: 100%; overflow-x: auto; margin-top: 8px; }
+    #phoneStatus { margin-top: 10px; font-size: .85rem; }
     .desc {
       font-size: 0.85rem;
       color: #94a3b8;
@@ -48,7 +51,7 @@
     .mode-btn.active { background: #ea580c; color: #fff; }
 
     label { font-size: 0.8rem; font-weight: 700; color: #cbd5e1; display: block; margin: 12px 0 4px; }
-    input[type="text"], #discordInput { width: 100%; background: #0f172a; border: 1px solid #475569; color: #fff; padding: 10px; border-radius: 8px; font-size: 0.95rem; }
+    input[type="text"], input[type="tel"], #discordInput { width: 100%; background: #0f172a; border: 1px solid #475569; color: #fff; padding: 10px; border-radius: 8px; font-size: 0.95rem; }
     .chip-wrap { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
     .chip { background: #334155; color: #e2e8f0; font-size: 0.8rem; padding: 5px 10px; border-radius: 16px; cursor: pointer; }
     .chip.active { background: #ea580c; color: #fff; font-weight: bold; }
@@ -112,7 +115,7 @@
         <div id="phoneRecaptcha"></div>
         <button class="btn-sub" id="phoneSend" onclick="sendPhoneCode()">SMSで確認コードを送る</button>
         <label for="phoneCode">SMSに届いた6桁の確認コード</label>
-        <input id="phoneCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456">
+        <input type="text" id="phoneCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456">
         <button class="btn-sub" id="phoneVerify" onclick="confirmPhoneCode()">確認してログイン</button>
         <button class="btn-sub" id="phoneLogout" onclick="logoutPhone()">ログアウト</button>
         <p id="phoneStatus" role="status" aria-live="polite"></p>

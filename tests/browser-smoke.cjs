@@ -201,6 +201,7 @@ const { resolve } = require('node:path');
     await page.getByRole('button', {name:'ログアウト',exact:true}).click();
     await page.getByText('ログアウトしました。',{exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>localStorage.getItem('phone-mock-user')),null);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false);
     await page.locator('#phoneNumber').fill('09012345678');
     await page.locator('#phoneSend').click();
     await page.getByText('電話番号の取り扱いを確認し、同意にチェックしてください。',{exact:true}).waitFor();
