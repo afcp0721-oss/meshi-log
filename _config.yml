@@ -15,3 +15,8 @@ exclude:
   - SECURITY-SETUP.md
   - "**/*.mjs"
   - "**/*.jsonc"
+  - phone-auth.mjs
+  - PHONE-LOGIN-SETUP.md
+  - package.json
+  - package-lock.json
+  - node_modules

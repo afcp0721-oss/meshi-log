@@ -104,6 +104,21 @@
       <div class="desc">いつでも変更できます。</div>
       <p style="margin:12px 0"><a href="https://afcp0721-oss.github.io/meshi-log/guide.html" target="_blank" rel="noopener noreferrer" style="color:#fdba74">📖 はじめての方へ・特徴と使い方 ↗</a></p>
 
+      <section aria-label="電話番号でログイン">
+        <label for="phoneNumber">電話番号でログイン</label>
+        <p class="desc">SMSを受け取れる携帯番号を入力してください。普段はログインしたまま使えます。身内テストは運営者の承認が必要です。</p>
+        <input type="tel" id="phoneNumber" autocomplete="tel" placeholder="09012345678 または +819012345678">
+        <label style="font-size:12px"><input type="checkbox" id="phoneConsent"> 本人確認のため、電話番号がGoogleに送信・保存され、不正利用防止に使われることに同意します。</label>
+        <div id="phoneRecaptcha"></div>
+        <button class="btn-sub" id="phoneSend" onclick="sendPhoneCode()">SMSで確認コードを送る</button>
+        <label for="phoneCode">SMSに届いた6桁の確認コード</label>
+        <input id="phoneCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456">
+        <button class="btn-sub" id="phoneVerify" onclick="confirmPhoneCode()">確認してログイン</button>
+        <button class="btn-sub" id="phoneLogout" onclick="logoutPhone()">ログアウト</button>
+        <p id="phoneStatus" role="status" aria-live="polite"></p>
+        <p class="desc">共有端末では使い終わったらログアウトしてください。番号を手放す前や紛失した場合は運営者へご連絡ください。番号だけで本人確認するため、他人にSMSを見せないでください。</p>
+        <details><summary>以前の記録・機種変更について</summary><p>最初のログイン前に、この記録IDを運営者へ伝えてください。本人確認後に引き継ぎます。</p><code id="existingUserId"></code><p>対応付け後は、同じ番号でログインすると以前の記録を使えます。呼び名・Discord保存先は端末ごとの設定です。番号変更や紛失からの自動復旧は未対応です。</p></details>
+      </section>
       <label>あなたの呼ばれ方（必須）</label>
       <input type="text" id="userCallInput" placeholder="例：ボス, ニックネーム" value="ニックネーム">
       <div class="chip-wrap">
@@ -235,6 +250,7 @@
   </div>
 
   <!-- スクリプト読み込み（キャッシュ対策 v=4） -->
-  <script src="app.js?v=15"></script>
+  <script src="phone-auth.js?v=1"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>

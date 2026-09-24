@@ -7,6 +7,8 @@ const { resolve } = require('node:path');
   const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await page.addInitScript(() => { if (!localStorage.getItem('phone-mock-seeded')) { localStorage.setItem('phone-mock-seeded','yes'); localStorage.setItem('phone-mock-user','yes'); } });
+    let smsCalls = 0;
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     let perPhoto = false;
@@ -27,9 +29,31 @@ const { resolve } = require('node:path');
     ];
     await page.route('**/*', async route => {
       const url = new URL(route.request().url());
+      if (url.hostname === 'www.gstatic.com') {
+        const body = url.pathname.endsWith('firebase-app.js') ? 'export function initializeApp(config) {return config}' : `
+          const user = {getIdToken:async()=> 'test-firebase-token'};
+          const auth = {authStateReady:async()=>{}, get currentUser(){return localStorage.getItem('phone-mock-user')?user:null}};
+          export const browserLocalPersistence = {};
+          export function getAuth(){return auth}
+          export async function setPersistence(){}
+          export class RecaptchaVerifier {clear(){}}
+          export async function signInWithPhoneNumber(auth,phone) {
+            await fetch('https://mock.test/sms',{method:'POST',body:phone});
+            return {async confirm(code){if(code!=='123456') throw {code:'auth/invalid-verification-code'};localStorage.setItem('phone-mock-user','yes')}};
+          }
+          export async function signOut(){localStorage.removeItem('phone-mock-user')}
+        `;
+        return route.fulfill({contentType:'text/javascript',body});
+      }
+      if (url.hostname==='mock.test') { smsCalls++; assert.equal(route.request().postData(),'+819012345678'); return route.fulfill({json:{ok:true}}); }
+      if (url.pathname === '/api/auth-config') return route.fulfill({json:{apiKey:'public',appId:'test',projectId:'test',authDomain:'test.firebaseapp.com'}});
       if (url.hostname === 'app.test') {
         const file = url.pathname === '/' ? 'index.html' : url.pathname.slice(1).split('?')[0];
         return route.fulfill({ contentType: file.endsWith('.js') ? 'text/javascript' : 'text/html', body: readFileSync(resolve(__dirname, '..', file)) });
+      }
+      if (url.pathname === '/api/session') {
+        assert.equal(route.request().headers().authorization,'Bearer test-firebase-token');
+        return route.fulfill({json:{userId:'phone-alice'}});
       }
       if (url.pathname === '/api/preview') {
         previewCalls++;
@@ -173,6 +197,35 @@ const { resolve } = require('node:path');
     assert.equal(reviewedPayload.photo_reports.length,3);
     assert.equal(reviewedPayload.photo_reports[1].x_post_text,'2枚目を編集');
     assert.equal(reviewedPayload.photoReports,true);
+    await page.getByRole('button', {name:'⚙️ 設定'}).click();
+    await page.getByRole('button', {name:'ログアウト',exact:true}).click();
+    await page.getByText('ログアウトしました。',{exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>localStorage.getItem('phone-mock-user')),null);
+    await page.locator('#phoneNumber').fill('09012345678');
+    await page.locator('#phoneSend').click();
+    await page.getByText('電話番号の取り扱いを確認し、同意にチェックしてください。',{exact:true}).waitFor();
+    assert.equal(smsCalls,0);
+    await page.locator('#phoneConsent').check();
+    await page.locator('#phoneSend').click();
+    await page.getByText('SMSを送りました。届いた6桁のコードを入力してください。',{exact:true}).waitFor();
+    assert.equal(smsCalls,1);
+    await page.locator('#phoneSend').click();
+    await page.getByText('再送は1分ほど待ってからお試しください。',{exact:true}).waitFor();
+    assert.equal(smsCalls,1);
+    await page.locator('#phoneCode').fill('000000');
+    await page.locator('#phoneVerify').click();
+    await page.getByText('確認コードが違います。SMSをご確認ください。',{exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>localStorage.getItem('phone-mock-user')),null);
+    await page.locator('#phoneCode').fill('123456');
+    await page.locator('#phoneVerify').click();
+    await page.getByText('ログインしました。Discordの保存先も設定してください。',{exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>localStorage.getItem('meshi_user_id')),'phone-alice');
+    assert.equal(await page.locator('#phoneCode').inputValue(),'');
+    assert.equal(await page.locator('#resultArea').innerText(),'');
+    await page.reload();
+    await page.getByRole('button',{name:'📖 過去ログ'}).click();
+    await page.getByRole('button',{name:'🍽️ めしレポ'}).waitFor();
+    assert.equal(smsCalls,1); // Retained login never sends another SMS.
     assert.deepEqual(errors, []);
     console.log('PASS quick deposit, preview/edit/save/cancel/retry, stale review invalidation, X confirmation/reset, history, meal report, mobile layout');
   } finally { await browser.close(); }

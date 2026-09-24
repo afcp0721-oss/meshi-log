@@ -16,6 +16,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install authentication dependency
+        run: npm ci --ignore-scripts
       - name: Check frontend JavaScript syntax
         run: node --check app.js
       - name: Check Worker JavaScript syntax
