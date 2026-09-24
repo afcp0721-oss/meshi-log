@@ -32,6 +32,10 @@ const { resolve } = require('node:path');
         const file = url.pathname === '/' ? 'index.html' : url.pathname.slice(1).split('?')[0];
         return route.fulfill({ contentType: file.endsWith('.js') ? 'text/javascript' : 'text/html', body: readFileSync(resolve(__dirname, '..', file)) });
       }
+      if (url.pathname === '/api/session') {
+        const token=route.request().headers().authorization;
+        return token==='Bearer '+ 'valid-invite'.padEnd(40,'_') ? route.fulfill({json:{userId:'invited-alice'}}) : route.fulfill({status:401,json:{error:'招待コードが無効です'}});
+      }
       if (url.pathname === '/api/preview') {
         previewCalls++;
         if (perPhoto) return route.fulfill({json:{status:'preview',analysis:{post_text:'3枚の記録',category_major:'food'},photo_reports:[0,1,2].map(i=>({photo_index:i,kind:i===1?'life':'meal',comment:'写真'+(i+1)+'のコメント',x_post_text:'写真'+(i+1)+'のX下書き',life_report:i===1?'日常の記録':null,meal_report:i===1?null:{meal_name:'食事',estimated_calories_min:500,estimated_calories_max:700,image_scope:'this_photo'}}))}});
@@ -174,6 +178,19 @@ const { resolve } = require('node:path');
     assert.equal(reviewedPayload.photo_reports.length,3);
     assert.equal(reviewedPayload.photo_reports[1].x_post_text,'2枚目を編集');
     assert.equal(reviewedPayload.photoReports,true);
+    await page.getByRole('button', {name:'⚙️ 設定'}).click();
+    await page.getByRole('button', {name:'ログアウト',exact:true}).click();
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('meshi_invite_token')),null);
+    await page.locator('#inviteCodeInput').fill('wrong-invite'.padEnd(40,'_'));
+    await page.locator('#inviteLoginButton').click();
+    await page.getByText('招待コードが無効です',{exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('meshi_invite_token')),null);
+    await page.locator('#inviteCodeInput').fill('valid-invite'.padEnd(40,'_'));
+    await page.locator('#inviteLoginButton').click();
+    await page.getByText('ログインしました。続けてDiscordの保存先を設定してください。',{exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>localStorage.getItem('meshi_user_id')),'invited-alice');
+    assert.equal(await page.locator('#inviteCodeInput').inputValue(),'');
+    assert.equal(await page.locator('#resultArea').innerText(),'');
     assert.deepEqual(errors, []);
     console.log('PASS quick deposit, preview/edit/save/cancel/retry, stale review invalidation, X confirmation/reset, history, meal report, mobile layout');
   } finally { await browser.close(); }
